@@ -54,6 +54,27 @@ class GriddedField(MomentField):
             m_hard += DM
         self._k_hard = int(round((m_hard - params.m_min) / DM))
 
+        # precomputed tables for the supportability scan (one-time cost):
+        # per-bin radius, required moment, and the annulus of integer cell
+        # offsets each bin adds to the previous bin's disk (centered on the
+        # epicenter's host cell — a sub-cell approximation within quadrature
+        # accuracy; deplete() keeps exact epicenter geometry)
+        ks = np.arange(self._k_hard + 1)
+        mags = params.m_min + ks * DM
+        self._scan_radius = rupture_radius(mags, params.a0, params.m_min)
+        self._scan_m0 = moment(mags)
+        self._scan_annuli = []
+        r_max = int(np.ceil(self._scan_radius[-1] / params.cell))
+        oi = np.arange(-r_max, r_max + 1)
+        dist2 = (oi[:, None] ** 2 + oi[None, :] ** 2) * params.cell**2
+        prev = np.zeros_like(dist2, dtype=bool)
+        for r in self._scan_radius:
+            disk = dist2 <= r**2
+            ann = disk & ~prev
+            ii, jj = np.nonzero(ann)
+            self._scan_annuli.append((oi[ii], oi[jj]))
+            prev = disk
+
     def field(self, t: float) -> np.ndarray:
         """Full field F(x, y, t) on the grid (N·m/km²)."""
         return self.p.f0 + self.p.mdot * t - self.depletion
@@ -131,15 +152,36 @@ class GriddedField(MomentField):
         return f.sum() * self.cell_area
 
     def local_kmax(self, x: float, y: float, t: float) -> int:
-        """First-failure scan up the magnitude bins (smallest crossing, spec §1.5)."""
+        """First-failure scan up the magnitude bins (smallest crossing, spec §1.5).
+
+        Incremental over precomputed per-bin annuli: each bin adds only its new
+        cells to running (in-domain cell count, depletion) sums, so the whole
+        scan costs one pass over the largest disk instead of one full disk sum
+        per bin.
+        """
         p = self.p
+        ci, cj = self.cell_index(x, y)
+        f_load = p.f0 + p.mdot * t
+        n_in = 0
+        dep_sum = 0.0
         k = -1
-        while k < self._k_hard:
-            m = p.m_min + (k + 1) * DM
-            r = rupture_radius(m, p.a0, p.m_min)
-            if self.enclosed_moment(x, y, r, t) < moment(m):
+        for kk in range(self._k_hard + 1):
+            di, dj = self._scan_annuli[kk]
+            if len(di):
+                ii = ci + di
+                jj = cj + dj
+                valid = (ii >= 0) & (ii < self.nx) & (jj >= 0) & (jj < self.ny)
+                n_in += int(valid.sum())
+                dep_sum += float(self.depletion[ii[valid], jj[valid]].sum())
+            if n_in == 0:
+                # disk smaller than a cell: host-cell density times disk area
+                f = f_load - self.depletion[ci, cj]
+                enclosed = f * np.pi * self._scan_radius[kk] ** 2
+            else:
+                enclosed = (f_load * n_in - dep_sum) * self.cell_area
+            if enclosed < self._scan_m0[kk]:
                 break
-            k += 1
+            k = kk
         return k
 
 
