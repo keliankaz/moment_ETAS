@@ -2,7 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import CenteredNorm
+from matplotlib.colors import CenteredNorm, LogNorm
 
 from ..params import DM
 
@@ -41,6 +41,30 @@ def epicenter_map(cat, ax=None):
     plt.colorbar(sc, ax=ax, label="time (yr)")
     ax.set(xlabel="x (km)", ylabel="y (km)", title="epicenters",
            xlim=(0, cat.params.lx), ylim=(0, cat.params.ly), aspect="equal")
+    return ax
+
+
+def epicenter_density(cat, bin_km=2.0, m_min=None, ax=None):
+    """Heat map of epicentral locations (counts per bin, log color scale).
+
+    Useful when the catalog is too dense for a scatter. Optional m_min
+    restricts to events at or above that magnitude.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(5.5, 5))
+    p = cat.params
+    sel = slice(None) if m_min is None else cat.m >= m_min
+    h, _, _ = np.histogram2d(
+        cat.x[sel], cat.y[sel],
+        bins=(np.arange(0, p.lx + bin_km, bin_km), np.arange(0, p.ly + bin_km, bin_km)),
+    )
+    im = ax.imshow(np.where(h > 0, h, np.nan).T, origin="lower",
+                   extent=(0, p.lx, 0, p.ly), cmap="inferno",
+                   norm=LogNorm(vmin=1, vmax=max(h.max(), 1)))
+    plt.colorbar(im, ax=ax, label=f"events / {bin_km:g}×{bin_km:g} km²")
+    title = "epicentral density" if m_min is None else f"epicentral density (M ≥ {m_min:g})"
+    ax.set(xlabel="x (km)", ylabel="y (km)", title=title,
+           xlim=(0, p.lx), ylim=(0, p.ly), aspect="equal")
     return ax
 
 
