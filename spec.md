@@ -252,7 +252,19 @@ it only *indirectly*, by forcing smaller (less productive) events in depleted re
 
 ---
 
-## 5. Parameters
+## 5. Domain, Parameters & Diagnostics
+
+### 5.1 Spatial Domain
+
+A rectangle $[0, L_x] \times [0, L_y]$ (default $100 \times 100$ km), discretized at cell size
+$\Delta$ (default 1 km). Loading and background rate are uniform over it. Boundary conventions:
+
+- **Triggered offspring** whose sampled location falls outside the domain are discarded
+  (standard ETAS boundary leakage; keep the domain comfortably larger than the analysis region).
+- **Rupture disks** are clipped at the boundary: integration and depletion use only the
+  in-domain portion (§7).
+
+### 5.2 Parameters
 
 **Time convention: all times are in days** — $t$, $\tau$, $c$, the simulation horizon
 $T_{\max}$, and all rates ($\mu_0$, $\dot{M}_{\text{load}}$) are per day. Annual quantities from
@@ -262,8 +274,10 @@ the literature (e.g. tectonic loading per year) must be divided by 365.25 on inp
 |--------|-------------|-------|---------------|
 | $M_{\min}$ | Completeness / minimum magnitude | — | 2.0 – 4.0 |
 | $b$ | GR b-value | — | 0.8 – 1.2 |
-| **Field** | | | |
+| **Domain** | | | |
+| $L_x \times L_y$ | Domain extent | km | default 100 × 100 |
 | $\Delta$ | Grid cell size (quadrature resolution) | km | 1 – 10 |
+| **Field** | | | |
 | $F_0$ | Initial moment density (sets initial $M_{\max}$) | N·m / km² | region-specific |
 | $\dot{M}_{\text{load}}$ | Tectonic moment loading rate (density) | N·m / km² / day | region-specific |
 | $A_0$ | Rupture area at $M_c$ (sets $R(M)$) | km² | ~ 1 – 100 |
@@ -276,6 +290,35 @@ the literature (e.g. tectonic loading per year) must be divided by 365.25 on inp
 | $D$ | Triggering spatial scale at $M_c$ | km | 1 – 20 |
 | $\gamma$ | Triggering spatial magnitude scaling | — | 0.3 – 1.0 |
 | $q$ | Triggering spatial power-law exponent | — | 1.5 – 2.5 |
+
+### 5.3 Criticality Diagnostic
+
+Because productivity rises with magnitude, the **local branching ratio depends on the local
+magnitude gap** $\Delta_M = M_{\max}(x,y,t) - M_{\min}$ (taking $M_c = M_{\min}$):
+
+$$
+n(\Delta_M) = \int_{M_{\min}}^{M_{\max}} \nu(M)\, f(M)\, dM
+= K\,\frac{b}{b-\alpha}\cdot\frac{1 - 10^{-(b-\alpha)\Delta_M}}{1 - 10^{-b\Delta_M}}
+\qquad (\alpha \ne b),
+$$
+
+$$
+n(\Delta_M) = K\, b \ln 10 \cdot \frac{\Delta_M}{1 - 10^{-b\Delta_M}} \qquad (\alpha = b).
+$$
+
+$n(\Delta_M)$ is increasing: **a charging field creeps toward criticality.** For $\alpha < b$ it
+saturates at $K b/(b-\alpha)$; for $\alpha = b$ it grows linearly in $\Delta_M$; for $\alpha > b$
+it grows like $10^{(\alpha-b)\Delta_M}$. If the reachable $M_{\max}$ pushes $n$ past 1, the next
+event tips a locally supercritical cascade. The moment field *does* quench such a cascade
+(depletion lowers $M_{\max}$, hence $n$) — but slowly, because GR-distributed cascade events are
+mostly tiny and carry little moment, so event counts explode geometrically while moment removal
+crawls. Transient supercriticality may be a desired regime (an emergent mainshock); it must be a
+*choice*, not an accident. Guards:
+
+- **Config-time**: report $n(\Delta_M)$ and the critical gap $\Delta_{\text{crit}}$ where
+  $n = 1$, alongside the fully-charged $M_{\max}$ implied by $F_0$ (a `diagnose()` helper).
+- **Run-time**: an events-per-model-day tripwire that aborts with a clear message rather than
+  hanging in an avalanche.
 
 ---
 
@@ -371,7 +414,9 @@ Return events, and optionally F snapshots over time
 ```
 
 The two field backends implement one interface; their agreement on identical simulations is the
-primary correctness check (§9, grid ↔ closed form).
+primary correctness check (§9, grid ↔ closed form). **Build order**: `GriddedField` first (with
+direct masked disk sums — no summed-area table until profiling justifies one); `AnalyticField`
+later as the cross-validation backend.
 
 ---
 
