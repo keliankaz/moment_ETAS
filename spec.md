@@ -38,8 +38,11 @@ this replaced).
 Magnitude ↔ moment conversion (Hanks-Kanamori):
 
 $$
-M_0(M) = C \, 10^{1.5\,M}, \qquad C = 10^{-10.7}\ \text{N}\cdot\text{m}
+M_0(M) = 10^{1.5\,M + 9.05}\ \text{N}\cdot\text{m}
 $$
+
+(Hanks & Kanamori 1979 in SI units; an earlier draft used $C = 10^{-10.7}$, which is the
+dyn·cm-convention constant misapplied to N·m.)
 
 ### 1.2 Tectonic Loading (Continuous)
 
@@ -129,8 +132,10 @@ can hold on disconnected intervals. $M_{\max}$ is the **smallest crossing** — 
 *contiguous* supportable interval starting at $M_{\min}$. Physically: a rupture grows through
 intermediate sizes, so it cannot jump over an unsupportable band; growth stops at the first
 magnitude the regional budget cannot sustain. This also guarantees every magnitude in the
-truncated GR support $[M_{\min}, M_{\max}]$ is itself supportable. Numerically: scan $M$ upward
-from $M_{\min}$ and bisect the first sign change of $\mathcal{M}(M) - M_0(M)$. If even
+truncated GR support $[M_{\min}, M_{\max}]$ is itself supportable. Numerically: magnitudes live
+on a discrete grid of width $\delta = 0.1$ (§2), so the scan is a finite walk up the bins
+$M_k = M_{\min} + k\delta$ — $M_{\max}$ is the last bin before the first failure of
+$\mathcal{M}(M_k) \ge M_0(M_k)$; no bisection or continuity care is needed. If even
 $M = M_{\min}$ is not supportable ($\mathcal{M}(x,y,t;M_{\min}) < M_0(M_{\min})$), the location is
 **locked**: the effective rate there is zero until loading repays the deficit.
 
@@ -149,19 +154,24 @@ can collectively lock a region until loading repays the debt.
 
 ## 2. Magnitude Distribution
 
-When an event is generated at location $(x, y)$ at time $t$, its magnitude is drawn from a
-**truncated Gutenberg-Richter** bounded by the *local* $M_{\max}$:
+Magnitudes are **discrete**, on bins of width $\delta = 0.1$ (matching catalog reporting
+resolution): $M_k = M_{\min} + k\delta$, $k = 0, 1, 2, \ldots$ When an event is generated at
+location $(x, y)$ at time $t$, its magnitude is drawn from a **truncated geometric GR** over the
+supportable bins:
 
 $$
-f(M \mid x, y, t) = \frac{\beta\, e^{-\beta(M - M_{\min})}}{1 - e^{-\beta(M_{\max}(x,y,t) - M_{\min})}},
-\qquad M_{\min} \le M \le M_{\max}(x, y, t)
+\Pr(M = M_k \mid x, y, t) = \frac{10^{-b\,k\delta}}{\sum_{j=0}^{k_{\max}} 10^{-b\,j\delta}},
+\qquad k = 0, \ldots, k_{\max}(x,y,t)
 $$
 
-where $\beta = b \ln 10$.
+where $M_{k_{\max}} = M_{\max}(x,y,t)$ is the largest supportable bin (§1.5). This is the
+discretization of the exponential GR density $f(M) \propto e^{-\beta M}$, $\beta = b\ln 10$;
+sampling is a single finite categorical draw and the supportability scan is a finite walk over
+the same bins.
 
-- Well-charged cells ($M_{\max} \gg M_{\min}$) behave like standard exponential GR.
-- Near-depleted cells ($M_{\max} \to M_{\min}$) allow only the smallest events.
-- Locked cells ($M_{\max} < M_{\min}$) generate no events.
+- Well-charged locations ($M_{\max} \gg M_{\min}$) behave like standard GR.
+- Near-depleted locations ($k_{\max} = 0$) produce only $M_{\min}$ events.
+- Locked locations (no supportable bin) generate no events.
 
 ---
 
@@ -177,18 +187,24 @@ $$
 $$
 
 The indicator is not an extra mechanism — it is the statement that the truncated GR of §2 has
-empty support at locked locations, expressed at the rate level. **Thinning compatibility**: since
-the indicator lies in $\{0,1\}$, it only ever lowers the rate, so the ungated ETAS sum remains a
-valid thinning envelope; loading can flip a location from locked to unlocked between proposals,
-but that only raises $\lambda$ *toward* the envelope, never above it (see §6 Notes).
+empty support at locked locations, expressed at the rate level. In the branching simulation (§6)
+it is implemented by **discarding** queued events that pop at locked locations; equivalently, in
+a thinning construction it only ever lowers the rate below the ungated ETAS envelope, so either
+algorithm remains valid.
 
 Beyond the lock, the field's influence on seismicity is through the **magnitude truncation** of
 §1.5–§2: a
 depleted region can host only small events, and small events have low productivity $\nu(M)$, so
 the rate feedback is *emergent* rather than imposed. Concretely:
 
-- A just-ruptured (depleted) patch still lights up with **many small** aftershocks at the full
-  ETAS rate — matching the observed high small-event density in rupture zones.
+- A partially depleted patch still hosts **many small** aftershocks at the full ETAS rate — only
+  the sizes are capped. (Caveat: a mainshock consumes roughly its whole supportability margin, so
+  its core can drop briefly below even the $M_{\min}$ threshold — *locked during the early Omori
+  peak* — pushing the earliest aftershocks into the surrounding ring. In-core activity resumes on
+  the recharge timescale of $M_{\min}$, which is short: time to re-support magnitude $M$ scales
+  like $10^{0.5M}/\dot{M}_{\text{load}}$. This is an emergent, testable prediction of the model,
+  at odds with the abundant immediate in-rupture-area aftershocks in real catalogs — watch for it
+  in simulations.)
 - But those small events seed few offspring (since $\nu(M) = K\,10^{\alpha(M-M_c)}$ falls steeply
   with magnitude), so the local branching ratio $n_{\text{local}} = \int \nu(M)\, f(M\mid\text{loc})\, dM$
   drops and the cascade dies out faster there.
@@ -317,55 +333,60 @@ appear.
 
 ## 6. Simulation Algorithm
 
-Ogata (1981) thinning, extended to carry the moment field $F$ as evolving state.
+**Chronological branching (cluster) simulation** with a priority queue. Offspring times and
+displacements are sampled *directly* from the normalized kernels (no thinning envelope), but
+events are processed strictly in time order so that magnitudes can be assigned from the
+then-current field state.
 
 ```
 Algorithm: simulate_catalog(T_max, domain, params)
 
 Initialize:
+  D      ← zero grid                     (accumulated depletion density)
   events ← []
-  F      ← full grid filled with F_0           (2D array over domain)
-  t      ← 0
+  queue  ← empty min-heap keyed on time
 
-While t < T_max:
+Seed background ("immigrant") events:
+  N_bg ~ Poisson(μ₀ · |domain| · T_max)
+  for each: t ~ Uniform(0, T_max), (x,y) ~ Uniform(domain); push (t, x, y)
 
-  1. Compute λ_upper — an upper bound on λ(t,x,y) over the domain:
-       λ_upper = μ₀·Area + Σ_i ν(Mᵢ)·g(t − tᵢ)·max_x h
+While queue not empty:
+  pop earliest (t, x, y)
 
-  2. Draw candidate inter-arrival:  Δt ~ Exp(λ_upper)
-     t ← t + Δt
-     Apply loading:  F += Ṁ_load · Δt      (whole grid)
+  1. Mmax(x,y,t) ← finite bin scan of supportability (§1.5), with
+       F(x', y', t) = F₀ + Ṁ_load · t − D(x', y')          (loading is lazy/analytic)
+  2. If no supportable bin: discard (location locked — this IS the lock indicator)
+  3. Draw magnitude:  M ~ discrete truncated GR over bins [Mmin, Mmax]   (§2)
+  4. Deplete:         D += M₀(M)/A(M) over the in-domain part of disk R(M)
+  5. Record event (t, x, y, M)
+  6. Spawn offspring:
+       N_off ~ Poisson(ν(M))
+       for each offspring:
+         τ ~ Omori:    τ = c · (u^(−1/(p−1)) − 1),  u ~ U(0,1)
+         r ~ spatial:  r = d(M) · sqrt(u^(−1/(q−1)) − 1),  u ~ U(0,1);  θ ~ U(0, 2π)
+         child ← (t + τ,  x + r·cosθ,  y + r·sinθ)
+         push child if  t + τ ≤ T_max  and child location ∈ domain   (else discard)
 
-  3. Draw candidate location: (x, y) ~ Uniform(domain)
-
-  4. Evaluate true rate:  λ_true = μ₀ + Σ_i ν(Mᵢ)·g(t−tᵢ)·h(...)
-
-  5. Accept with probability  λ_true / λ_upper:
-       YES →
-         Mmax(x,y,t) ← first M ≥ Mmin where enclosed_moment(x,y,R(M)) < M₀(M)   (§1.5)
-         If Mmax < Mmin: reject (location locked — λ_eff = 0 here)
-         Else:
-           Draw magnitude:  M ~ truncated_GR(Mmin, Mmax(x,y,t), b)
-           Deplete field:   over disk R(M), F −= M₀(M)/A(M)    (may go negative)
-           Record event (t, x, y, M); append to Hₜ
-       NO  → continue (thinned; no state change)
-
-Return events, and optionally F snapshots over time
+Return events, plus optional F snapshots (reconstructable from D and t)
 ```
 
 ### Notes
-- **Enclosed-moment queries**: maintain a **summed-area table (integral image)** of $F$ so any
-  disk integral $\mathcal{M}(x,y,t;M)$ is $O(1)$ (square-approximated) or a few lookups; rebuild
-  lazily after depletions. The $M_{\max}$ root-find is only run at *accepted* candidates, not the
-  whole grid.
-- **Field snapshots**: store $F$ at intervals for visualizing the evolving $M_{\max}$ map (which
-  needs a root-find per cell, so compute it on a coarse grid).
-- **Thinning validity with the lock**: the lock indicator $\in \{0,1\}$ only ever lowers the true
-  rate, so the ungated ETAS envelope remains valid. Rejecting a locked candidate at step 5 is
-  equivalent to having evaluated $\lambda_{\text{true}} = 0$ there. Loading can *unlock* a region
-  between proposals (raising its rate from 0 back to the ETAS value), but never above the
-  envelope. The only cost is efficiency: a locked mainshock core still attracts proposals at full
-  Omori weight, all rejected.
+- **Equivalence to the intensity formulation (§3)**: the queue realizes the exact cluster
+  representation of ETAS — each event independently spawns Poisson($\nu(M)$) offspring with
+  i.i.d. kernel-distributed delays/displacements. Magnitude assignment at *pop time* is valid
+  because pops occur in chronological order, so the field state seen by each event is exactly the
+  history $\mathcal{H}_t$ it would see under the intensity formulation; discarding pops at locked
+  sites implements the lock indicator.
+- **No envelope, no rejection loop**: inverse-CDF sampling of $g$ and $h$ replaces thinning
+  entirely; cost is $O(N \log N)$ in catalog size with no efficiency collapse as parents
+  accumulate. (The locked-core pops are the only discarded work, and each costs one bin scan.)
+- **Lazy loading**: loading is uniform and deterministic, so the field never needs a loading
+  update — store only the depletion grid $D$ and evaluate
+  $F = F_0 + \dot{M}_{\text{load}}\,t - D$ at query time.
+- **Enclosed-moment queries**: direct masked disk sums over $D$'s cells (§8 build note); only one
+  scan per popped event.
+- **Field snapshots**: store $D$ (or $F$) at intervals for visualizing the evolving $M_{\max}$
+  map (which needs a bin scan per cell, so compute it on a coarse grid).
 
 ---
 
@@ -378,7 +399,7 @@ Return events, and optionally F snapshots over time
 | Non-monotone $\mathcal{M}(M)$ (deficit pockets in disk) | Supportability can hold on disconnected intervals; $M_{\max}$ is the end of the contiguous interval from $M_{\min}$ (smallest crossing, §1.5) |
 | Rupture disk extends past domain edge | Integrate/deplete only over the in-domain portion; the outside share of removed moment is lost (or use reflecting edges — config flag) |
 | Dense swarm | Cumulative depletion can lock a whole region → quiescence until recharge (emergent) |
-| $\lambda_{\text{upper}} < \lambda_{\text{true}}$ | Standard ETAS thinning guard; the field never raises the rate so the bound always holds |
+| Offspring sampled outside domain or beyond $T_{\max}$ | Discarded at push time (standard branching-boundary leakage; keep domain larger than analysis region) |
 
 ---
 
@@ -396,10 +417,11 @@ Return events, and optionally F snapshots over time
 │   │   │                           load(), deplete(), enclosed_moment(), local_mmax()
 │   │   ├── magnitude.py          ← truncated_gr_sample(), truncated_gr_pdf()
 │   │   ├── rupture.py            ← rupture_area A(M), rupture_radius R(M)
-│   │   ├── kernels.py            ← omori_utsu(), spatial_kernel(), productivity()
-│   │   └── intensity.py          ← conditional_intensity(), upper_bound()
+│   │   ├── kernels.py            ← omori/spatial inverse-CDF samplers, productivity()
+│   │   └── intensity.py          ← conditional_intensity() — not used by the simulator
+│   │                               (branching needs no rate evaluation); kept for diagnostics
 │   ├── simulation/
-│   │   └── simulate.py           ← simulate_catalog() — thinning over the moment field
+│   │   └── simulate.py           ← simulate_catalog() — chronological branching (§6)
 │   └── visualization/
 │       └── plots.py              ← field_animation(), mmax_map(), space_time_plot(), mag_dist()
 └── notebooks/
