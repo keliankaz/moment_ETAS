@@ -349,25 +349,29 @@ Return events, and optionally F snapshots over time
 ## 8. Planned File Structure
 
 ```
-moment_etas/
+.                                 ← repo root
 ├── spec.md                       ← this file
-├── model/
-│   ├── __init__.py
-│   ├── moment_field.py           ← MomentField: density grid, load(), enclosed_moment() [summed-area table],
-│   │                                deplete_disk(), local_mmax() [root-find]
-│   ├── magnitude.py              ← truncated_gr_sample(), truncated_gr_pdf()
-│   ├── rupture.py                ← rupture_area A(M), rupture_radius R(M)
-│   ├── kernels.py                ← omori_utsu(), spatial_kernel(), productivity()
-│   └── intensity.py              ← conditional_intensity(), upper_bound()
-├── simulation/
-│   ├── __init__.py
-│   └── simulate.py               ← simulate_catalog() — thinning over the moment field
-├── visualization/
-│   ├── __init__.py
-│   └── plots.py                  ← field_animation(), mmax_map(), space_time_plot(), mag_dist()
+├── environment.yml               ← conda env (installs package editable)
+├── pyproject.toml                ← package metadata
+├── moment_etas/                  ← installable package
+│   ├── model/
+│   │   ├── moment_field.py       ← MomentField interface + GriddedField (summed-area table)
+│   │   │                           and AnalyticField (closed-form disk overlaps) backends;
+│   │   │                           load(), deplete(), enclosed_moment(), local_mmax()
+│   │   ├── magnitude.py          ← truncated_gr_sample(), truncated_gr_pdf()
+│   │   ├── rupture.py            ← rupture_area A(M), rupture_radius R(M)
+│   │   ├── kernels.py            ← omori_utsu(), spatial_kernel(), productivity()
+│   │   └── intensity.py          ← conditional_intensity(), upper_bound()
+│   ├── simulation/
+│   │   └── simulate.py           ← simulate_catalog() — thinning over the moment field
+│   └── visualization/
+│       └── plots.py              ← field_animation(), mmax_map(), space_time_plot(), mag_dist()
 └── notebooks/
     └── 01_exploration.ipynb      ← interactive sandbox
 ```
+
+The two field backends implement one interface; their agreement on identical simulations is the
+primary correctness check (§9, grid ↔ closed form).
 
 ---
 
