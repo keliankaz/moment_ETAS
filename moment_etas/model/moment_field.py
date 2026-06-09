@@ -58,6 +58,12 @@ class GriddedField(MomentField):
         """Full field F(x, y, t) on the grid (N·m/km²)."""
         return self.p.f0 + self.p.mdot * t - self.depletion
 
+    def cell_index(self, x: float, y: float) -> tuple[int, int]:
+        """Grid indices of the cell containing (x, y), clamped to the domain."""
+        i = min(max(int(x / self.p.cell), 0), self.nx - 1)
+        j = min(max(int(y / self.p.cell), 0), self.ny - 1)
+        return i, j
+
     def _disk_mask(self, x: float, y: float, radius: float):
         """In-domain disk cells plus the unclipped cell count.
 
@@ -92,19 +98,32 @@ class GriddedField(MomentField):
         r = rupture_radius(m, self.p.a0, self.p.m_min)
         i0, i1, j0, j1, mask, n_unclipped = self._disk_mask(x, y, r)
         if n_unclipped == 0:
-            i = min(int(x / self.p.cell), self.nx - 1)
-            j = min(int(y / self.p.cell), self.ny - 1)
+            i, j = self.cell_index(x, y)
             self.depletion[i, j] += moment(m) / self.cell_area
             return
         level = moment(m) / (n_unclipped * self.cell_area)
         self.depletion[i0:i1, j0:j1][mask] += level
 
+    def drop_level_at(self, i: int, j: int, x: float, y: float, m: float) -> float:
+        """Depletion level an event at (x, y) with magnitude m applies to cell (i, j).
+
+        Mirrors `deplete` exactly (same mask and normalization rules) for
+        per-cell reconstruction of the field history; returns 0.0 if the cell
+        is not covered. Keep the two methods in sync.
+        """
+        r = rupture_radius(m, self.p.a0, self.p.m_min)
+        i0, i1, j0, j1, mask, n_unclipped = self._disk_mask(x, y, r)
+        if n_unclipped == 0:
+            return moment(m) / self.cell_area if (i, j) == self.cell_index(x, y) else 0.0
+        if i0 <= i < i1 and j0 <= j < j1 and mask[i - i0, j - j0]:
+            return moment(m) / (n_unclipped * self.cell_area)
+        return 0.0
+
     def enclosed_moment(self, x: float, y: float, radius: float, t: float) -> float:
         i0, i1, j0, j1, mask, _ = self._disk_mask(x, y, radius)
         if not mask.any():
             # disk smaller than a cell: use the host cell's density times disk area
-            i = min(int(x / self.p.cell), self.nx - 1)
-            j = min(int(y / self.p.cell), self.ny - 1)
+            i, j = self.cell_index(x, y)
             f = self.p.f0 + self.p.mdot * t - self.depletion[i, j]
             return f * np.pi * radius**2
         dep = self.depletion[i0:i1, j0:j1][mask]

@@ -20,8 +20,3 @@ def rupture_area(m, a0, m_min):
 def rupture_radius(m, a0, m_min):
     """Equivalent circular rupture radius R(M) in km."""
     return np.sqrt(rupture_area(m, a0, m_min) / np.pi)
-
-
-def stress_density(m, a0, m_min):
-    """Depletion level M0(M)/A(M): moment density removed over the disk, N·m/km²."""
-    return moment(m) / rupture_area(m, a0, m_min)

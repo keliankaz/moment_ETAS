@@ -7,7 +7,7 @@ sampled directly from the Omori and spatial kernels. No thinning envelope.
 """
 
 import heapq
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dc_field
 
 import numpy as np
 
@@ -29,7 +29,7 @@ class Catalog:
     n_locked: int               # queued events discarded at locked locations
     field: MomentField          # final field state
     params: Params
-    snapshots: list = field(default_factory=list)   # (t, depletion copy) pairs
+    snapshots: list = dc_field(default_factory=list)   # (t, depletion copy) pairs
 
     def __len__(self) -> int:
         return len(self.t)
@@ -64,7 +64,9 @@ def simulate_catalog(
     while heap:
         t, _, x, y, parent = heapq.heappop(heap)
 
-        if snapshot_every is not None and t >= next_snapshot:
+        # catch the schedule fully up: a quiet gap can span several intervals,
+        # and D is constant between events so each owed snapshot is exact
+        while snapshot_every is not None and t >= next_snapshot:
             snapshots.append((next_snapshot, fld.depletion.copy()))
             next_snapshot += snapshot_every
 
@@ -93,6 +95,12 @@ def simulate_catalog(
                 if tc <= t_max and 0.0 <= xc <= params.lx and 0.0 <= yc <= params.ly:
                     heapq.heappush(heap, (tc, seq, xc, yc, idx))
                     seq += 1
+
+    # drain snapshots owed between the last event and t_max
+    if snapshot_every is not None:
+        while next_snapshot <= t_max:
+            snapshots.append((next_snapshot, fld.depletion.copy()))
+            next_snapshot += snapshot_every
 
     return Catalog(
         t=np.array(ts),

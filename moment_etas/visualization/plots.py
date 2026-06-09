@@ -2,9 +2,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import CenteredNorm
 
 from ..params import DM
-from ..model.rupture import moment, rupture_radius
 
 
 def magnitude_time(cat, ax=None):
@@ -70,7 +70,7 @@ def field_map(cat, t=None, ax=None):
         t = cat.t.max() if len(cat) else 0.0
     f = cat.field.field(t)
     im = ax.imshow(f.T, origin="lower", extent=(0, p.lx, 0, p.ly), cmap="RdBu",
-                   norm=plt.matplotlib.colors.CenteredNorm(vcenter=0.0))
+                   norm=CenteredNorm(vcenter=0.0))
     plt.colorbar(im, ax=ax, label="F (N·m/km²)")
     ax.set(xlabel="x (km)", ylabel="y (km)", title=f"moment density, t = {t/365.25:.1f} yr")
     return ax
@@ -108,20 +108,13 @@ def field_sawtooth(cat, x, y, n_t=2000, ax=None):
         _, ax = plt.subplots(figsize=(9, 3))
     p = cat.params
     fld = cat.field
-    i = min(int(x / p.cell), fld.nx - 1)
-    j = min(int(y / p.cell), fld.ny - 1)
+    i, j = fld.cell_index(x, y)
 
     drops = []  # (time, depletion level at this cell)
     for te, xe, ye, me in zip(cat.t, cat.x, cat.y, cat.m):
-        r = rupture_radius(me, p.a0, p.m_min)
-        i0, i1, j0, j1, mask, n_unclipped = fld._disk_mask(xe, ye, r)
-        if n_unclipped == 0:
-            ie = min(int(xe / p.cell), fld.nx - 1)
-            je = min(int(ye / p.cell), fld.ny - 1)
-            if (ie, je) == (i, j):
-                drops.append((te, moment(me) / fld.cell_area))
-        elif i0 <= i < i1 and j0 <= j < j1 and mask[i - i0, j - j0]:
-            drops.append((te, moment(me) / (n_unclipped * fld.cell_area)))
+        lvl = fld.drop_level_at(i, j, xe, ye, me)
+        if lvl > 0.0:
+            drops.append((te, lvl))
 
     t_end = cat.t.max() if len(cat) else 1.0
     tt = np.linspace(0.0, t_end, n_t)

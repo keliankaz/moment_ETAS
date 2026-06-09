@@ -18,6 +18,15 @@ def gr_pmf(k_max: int, b: float) -> np.ndarray:
 
 
 def sample_magnitude(rng: np.random.Generator, m_min: float, k_max: int, b: float) -> float:
-    """Draw one magnitude from the truncated discrete GR."""
-    k = rng.choice(k_max + 1, p=gr_pmf(k_max, b))
-    return m_min + k * DM
+    """Draw one magnitude from the truncated discrete GR.
+
+    Inverse-CDF sampling of the truncated geometric (one uniform draw, no
+    allocation — this is the per-event hot path): with ρ = 10^(−b·DM),
+    CDF(k) = (1 − ρ^(k+1)) / (1 − ρ^(k_max+1)).
+    """
+    if k_max < 0:
+        raise ValueError("k_max < 0: no supportable bin (locked location)")
+    rho = 10.0 ** (-b * DM)
+    u = rng.random()
+    k = int(np.log(1.0 - u * (1.0 - rho ** (k_max + 1))) / np.log(rho))
+    return m_min + min(k, k_max) * DM
