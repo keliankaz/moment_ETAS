@@ -7,7 +7,7 @@ sampled directly from the Omori and spatial kernels. No thinning envelope.
 """
 
 import heapq
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -29,6 +29,7 @@ class Catalog:
     n_locked: int               # queued events discarded at locked locations
     field: MomentField          # final field state
     params: Params
+    snapshots: list = field(default_factory=list)   # (t, depletion copy) pairs
 
     def __len__(self) -> int:
         return len(self.t)
@@ -38,6 +39,7 @@ def simulate_catalog(
     params: Params,
     t_max: float,
     seed: int | None = None,
+    snapshot_every: float | None = None,
 ) -> Catalog:
     """Run the branching simulation for t_max days. Times in days, coords in km."""
     rng = np.random.default_rng(seed)
@@ -56,9 +58,15 @@ def simulate_catalog(
 
     ts, xs, ys, ms, parents = [], [], [], [], []
     n_locked = 0
+    snapshots = []
+    next_snapshot = snapshot_every
 
     while heap:
         t, _, x, y, parent = heapq.heappop(heap)
+
+        if snapshot_every is not None and t >= next_snapshot:
+            snapshots.append((next_snapshot, fld.depletion.copy()))
+            next_snapshot += snapshot_every
 
         k_max = fld.local_kmax(x, y, t)
         if k_max < 0:
@@ -95,4 +103,5 @@ def simulate_catalog(
         n_locked=n_locked,
         field=fld,
         params=params,
+        snapshots=snapshots,
     )
