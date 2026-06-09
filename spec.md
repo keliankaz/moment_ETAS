@@ -291,7 +291,7 @@ the literature (e.g. tectonic loading per year) must be divided by 365.25 on inp
 | $\gamma$ | Triggering spatial magnitude scaling | — | 0.3 – 1.0 |
 | $q$ | Triggering spatial power-law exponent | — | 1.5 – 2.5 |
 
-### 5.3 Criticality Diagnostic
+### 5.3 Criticality Note
 
 Because productivity rises with magnitude, the **local branching ratio depends on the local
 magnitude gap** $\Delta_M = M_{\max}(x,y,t) - M_{\min}$ (taking $M_c = M_{\min}$):
@@ -306,19 +306,12 @@ $$
 n(\Delta_M) = K\, b \ln 10 \cdot \frac{\Delta_M}{1 - 10^{-b\Delta_M}} \qquad (\alpha = b).
 $$
 
-$n(\Delta_M)$ is increasing: **a charging field creeps toward criticality.** For $\alpha < b$ it
-saturates at $K b/(b-\alpha)$; for $\alpha = b$ it grows linearly in $\Delta_M$; for $\alpha > b$
-it grows like $10^{(\alpha-b)\Delta_M}$. If the reachable $M_{\max}$ pushes $n$ past 1, the next
-event tips a locally supercritical cascade. The moment field *does* quench such a cascade
-(depletion lowers $M_{\max}$, hence $n$) — but slowly, because GR-distributed cascade events are
-mostly tiny and carry little moment, so event counts explode geometrically while moment removal
-crawls. Transient supercriticality may be a desired regime (an emergent mainshock); it must be a
-*choice*, not an accident. Guards:
-
-- **Config-time**: report $n(\Delta_M)$ and the critical gap $\Delta_{\text{crit}}$ where
-  $n = 1$, alongside the fully-charged $M_{\max}$ implied by $F_0$ (a `diagnose()` helper).
-- **Run-time**: an events-per-model-day tripwire that aborts with a clear message rather than
-  hanging in an avalanche.
+$n(\Delta_M)$ is increasing in the gap, so a well-charged region can be locally supercritical
+($n > 1$). This is left **unguarded by design**: the supercritical contribution comes from the
+largest events, which are also the events that deplete the field hardest, so the cascade and its
+quench act on the same channel and are expected to keep each other in check. Whether that balance
+holds is an empirical question for the simulations; revisit only if runaway cascades actually
+appear.
 
 ---
 
