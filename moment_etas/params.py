@@ -28,6 +28,7 @@ class Params:
     alpha: float = 1.0      # productivity magnitude scaling
     c: float = 0.01         # Omori offset, days
     p: float = 1.2          # Omori exponent (> 1 strictly)
+    tau_max: float = 36525.0  # aftershock delay cutoff, days (100 yr); None = untruncated
     d_km: float = 1.0       # triggering spatial scale at m_min, km
     gamma: float = 0.5      # triggering spatial magnitude scaling
     q: float = 1.8          # spatial power-law exponent (> 1 strictly)

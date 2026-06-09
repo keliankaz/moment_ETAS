@@ -238,6 +238,11 @@ Normalized to integrate to 1 over $(0, \infty)$, which **requires $p > 1$ strict
 the prefactor vanishes and the integral diverges (no proper density exists). Values just above 1
 are legal but very long-tailed (the mean delay diverges for $p \le 2$).
 
+**Delay cutoff**: offspring delays are censored at $\tau_{\max}$ (default 100 yr) — triggered
+events with $\tau > \tau_{\max}$ are discarded, folding ultra-long-delay triggering into the
+background. The effective offspring count becomes $\nu(M)\,G(\tau_{\max})$ with
+$G(\tau) = 1 - (1 + \tau/c)^{1-p}$ (a ~5% reduction at default parameters).
+
 ### 3.5 Spatial Triggering Kernel (Isotropic Power-Law)
 
 $$
@@ -303,6 +308,7 @@ the literature (e.g. tectonic loading per year) must be divided by 365.25 on inp
 | $\alpha$ | Productivity magnitude scaling | — | 0.5 – 2.0 |
 | $c$ | Omori time offset | days | 0.001 – 1.0 |
 | $p$ | Omori temporal decay exponent | — | 1.05 – 1.5 (strictly $p > 1$) |
+| $\tau_{\max}$ | Aftershock delay cutoff | days | 36 525 (100 yr) |
 | $D$ | Triggering spatial scale at $M_c$ | km | 1 – 20 |
 | $\gamma$ | Triggering spatial magnitude scaling | — | 0.3 – 1.0 |
 | $q$ | Triggering spatial power-law exponent | — | 1.5 – 2.5 |
@@ -365,7 +371,8 @@ While queue not empty:
          τ ~ Omori:    τ = c · (u^(−1/(p−1)) − 1),  u ~ U(0,1)
          r ~ spatial:  r = d(M) · sqrt(u^(−1/(q−1)) − 1),  u ~ U(0,1);  θ ~ U(0, 2π)
          child ← (t + τ,  x + r·cosθ,  y + r·sinθ)
-         push child if  t + τ ≤ T_max  and child location ∈ domain   (else discard)
+         push child if  τ ≤ τ_max  and  t + τ ≤ T_max  and child location ∈ domain
+         (else discard)
 
 Return events, plus optional F snapshots (reconstructable from D and t)
 ```

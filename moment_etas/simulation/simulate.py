@@ -91,6 +91,8 @@ def simulate_catalog(
             d = spatial_scale(m, params.d_km, params.gamma, params.m_min)
             dx, dy = sample_displacement(rng, n_off, d, params.q)
             for j in range(n_off):
+                if params.tau_max is not None and tau[j] > params.tau_max:
+                    continue  # delay censored: long-tail triggering folded into background
                 tc, xc, yc = t + tau[j], x + dx[j], y + dy[j]
                 if tc <= t_max and 0.0 <= xc <= params.lx and 0.0 <= yc <= params.ly:
                     heapq.heappush(heap, (tc, seq, xc, yc, idx))
