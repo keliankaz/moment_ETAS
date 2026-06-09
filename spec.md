@@ -116,18 +116,23 @@ $$
 
 In a fully charged field the left side grows with the disk area ($\sim 10^{M}$), the right with
 released moment ($\sim 10^{1.5M}$), so the right eventually dominates. The local maximum magnitude
-is the largest supportable magnitude:
+is defined by the **first failure of supportability** as $M$ increases from $M_{\min}$:
 
 $$
-M_{\max}(x, y, t) = \sup \left\{ M \ge M_{\min} \;:\; \mathcal{M}(x, y, t;\, M) \ge M_0(M) \right\}
+M_{\max}(x, y, t) = \sup \left\{ M \ge M_{\min} \;:\;
+\mathcal{M}(x, y, t;\, M') \ge M_0(M') \ \ \forall\, M' \in [M_{\min},\, M] \right\}
 $$
 
 Note the integrand $F$ is **signed** (§1.4): deficit pockets inside the disk subtract from the
 enclosed moment, so $\mathcal{M}(M)$ need not be monotone in $M$ and the supportability condition
-can have multiple crossings. $M_{\max}$ is the *largest* crossing — numerically, scan $M$ downward
-from a global upper bound (e.g. the fully-charged $M_{\max}$) and bisect the first sign change. If
-even $M = M_{\min}$ is not supportable ($\mathcal{M}(x,y,t;M_{\min}) < M_0(M_{\min})$), the
-location is **locked**: the effective rate there is zero until loading repays the deficit.
+can hold on disconnected intervals. $M_{\max}$ is the **smallest crossing** — the end of the
+*contiguous* supportable interval starting at $M_{\min}$. Physically: a rupture grows through
+intermediate sizes, so it cannot jump over an unsupportable band; growth stops at the first
+magnitude the regional budget cannot sustain. This also guarantees every magnitude in the
+truncated GR support $[M_{\min}, M_{\max}]$ is itself supportable. Numerically: scan $M$ upward
+from $M_{\min}$ and bisect the first sign change of $\mathcal{M}(M) - M_0(M)$. If even
+$M = M_{\min}$ is not supportable ($\mathcal{M}(x,y,t;M_{\min}) < M_0(M_{\min})$), the location is
+**locked**: the effective rate there is zero until loading repays the deficit.
 
 Because $M_{\max}$ integrates moment over a region rather than a single cell, an isolated charged
 cell no longer bottlenecks event size, and the largest possible earthquake is set by the regional
@@ -293,7 +298,7 @@ While t < T_max:
 
   5. Accept with probability  λ_true / λ_upper:
        YES →
-         Mmax(x,y,t) ← largest M with enclosed_moment(x,y,R(M)) ≥ M₀(M)   (§1.5)
+         Mmax(x,y,t) ← first M ≥ Mmin where enclosed_moment(x,y,R(M)) < M₀(M)   (§1.5)
          If Mmax < Mmin: reject (location locked — λ_eff = 0 here)
          Else:
            Draw magnitude:  M ~ truncated_GR(Mmin, Mmax(x,y,t), b)
@@ -326,7 +331,7 @@ Return events, and optionally F snapshots over time
 |-----------|----------|
 | Enclosed moment $< M_0(M_{\min})$ at a point | $M_{\max} < M_{\min}$ → location locked; rate clamped to zero until loading repays the deficit |
 | Negative field density | Allowed by design: a strain deficit (§1.4); prevented from producing events by the lock, not by a floor |
-| Non-monotone $\mathcal{M}(M)$ (deficit pockets in disk) | Multiple supportability crossings possible; take the largest (§1.5) |
+| Non-monotone $\mathcal{M}(M)$ (deficit pockets in disk) | Supportability can hold on disconnected intervals; $M_{\max}$ is the end of the contiguous interval from $M_{\min}$ (smallest crossing, §1.5) |
 | Rupture disk extends past domain edge | Integrate/deplete only over the in-domain portion; the outside share of removed moment is lost (or use reflecting edges — config flag) |
 | Dense swarm | Cumulative depletion can lock a whole region → quiescence until recharge (emergent) |
 | $\lambda_{\text{upper}} < \lambda_{\text{true}}$ | Standard ETAS thinning guard; the field never raises the rate so the bound always holds |
