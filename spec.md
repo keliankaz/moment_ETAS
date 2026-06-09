@@ -367,7 +367,7 @@ While queue not empty:
          child ← (t + τ,  x + r·cosθ,  y + r·sinθ)
          push child if  t + τ ≤ T_max  and child location ∈ domain   (else discard)
 
-Return events, plus optional F snapshots (reconstructable from D and t)
+Return events and the final field state
 ```
 
 ### Notes
@@ -385,8 +385,9 @@ Return events, plus optional F snapshots (reconstructable from D and t)
   $F = F_0 + \dot{M}_{\text{load}}\,t - D$ at query time.
 - **Enclosed-moment queries**: direct masked disk sums over $D$'s cells (§8 build note); only one
   scan per popped event.
-- **Field snapshots**: store $D$ (or $F$) at intervals for visualizing the evolving $M_{\max}$
-  map (which needs a bin scan per cell, so compute it on a coarse grid).
+- **Field at intermediate times**: no snapshotting is done during simulation — the catalog fully
+  determines the field at any $t$ (replay depletions for events with $t_i \le t$ into a fresh
+  $D$, then $F = F_0 + \dot{M}_{\text{load}}\,t - D$). Reconstruct on demand for visualization.
 
 ---
 
