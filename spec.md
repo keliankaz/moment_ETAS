@@ -9,10 +9,10 @@ magnitude**: the largest event achievable at a point is set by the moment availa
 rupture footprint. Earthquakes deplete the field near their epicenter; tectonic loading slowly
 recharges it.
 
-The rate of events is left as plain ETAS — the field does not multiply the intensity. Instead,
-depletion influences seismicity *indirectly*: where the field is low, only small events are
-possible, small events have low productivity, and so aftershock cascades self-limit in depleted
-ground without any explicit rate term.
+The rate of events is left as plain ETAS — the field does not modulate the intensity, except for
+a hard zero where the budget cannot support even the smallest event. Depletion otherwise
+influences seismicity *indirectly*: where the field is low, only small events are possible, small
+events have low productivity, and so aftershock cascades self-limit in depleted ground.
 
 The result is a coupled field/point-process system. ETAS supplies the triggering structure; the
 moment field supplies a spatially resolved, history-dependent **energy budget** that caps event
@@ -73,36 +73,31 @@ from** (§1.5) and **depletes** (§1.4).
 
 ### 1.4 Depletion at Each Event (Instantaneous)
 
-When event $i$ occurs at $(x_i, y_i)$ with magnitude $M_i$, it removes its full seismic moment
-$M_0(M_i)$ from inside its rupture disk by **subtracting a uniform level $c_i$ and flooring at
-zero** — a flat subtraction, *not* a rescaling:
+When event $i$ occurs at $(x_i, y_i)$ with magnitude $M_i$, it subtracts its full seismic moment
+**uniformly** over its rupture disk:
 
 $$
-F(x, y, t_i^+) = \max\!\big(\,F(x, y, t_i^-) - c_i,\ 0\,\big),
+F(x, y, t_i^+) = F(x, y, t_i^-) - \frac{M_0(M_i)}{A(M_i)},
 \qquad \|(x,y) - (x_i,y_i)\| \le R(M_i)
 $$
 
-The level $c_i \ge 0$ is chosen so the total moment removed equals $M_0(M_i)$:
+- **The field is signed: $F$ may go negative.** No floor is applied. A negative value is a
+  **strain deficit** — an overdrawn budget that tectonic loading must repay before the location
+  can host events again. The physical guarantee moves from the field to the *rate*: where the
+  budget cannot support even $M_{\min}$, the effective event rate is clamped to zero (§1.5, §3).
+- **Exact accounting**: every event removes exactly $M_0(M_i)$ (modulo disk area clipped at the
+  domain edge). No solve is needed — depletion is linear in the event history.
+- **Closed-form superposition**: because loading and depletion are both linear, the field is
+  expressible ETAS-style as
 
 $$
-\int_{\|(x,y)-(x_i,y_i)\| \le R(M_i)} \min\!\big(\,F(x, y, t_i^-),\ c_i\,\big)\; dA = M_0(M_i)
+F(x,y,t) = F_0 + \dot{M}_{\text{load}}\, t
+- \sum_{i:\, t_i < t} \frac{M_0(M_i)}{A(M_i)}\,
+\mathbf{1}\!\big[\|(x,y) - (x_i,y_i)\| \le R(M_i)\big]
 $$
 
-The left side increases monotonically in $c_i$ from $0$ up to the enclosed moment
-$\mathcal{M}(x_i,y_i,t_i^-;\,M_i)$ (§1.5); since the event is only generated when supportability
-holds, $M_0(M_i) \le \mathcal{M}$, so a unique $c_i$ exists (a 1-D monotone solve). Two guarantees
-follow:
-
-- **Non-negativity**: the $\max(\cdot,0)$ floor means $F$ can never go below zero.
-- **Exact accounting**: matching $c_i$ to $M_0(M_i)$ removes exactly the event's moment (modulo
-  domain-edge losses).
-
-Points richer than $c_i$ drop by $c_i$; points poorer than $c_i$ empty to zero — a large event
-carves a rupture-area-sized depleted "hole" while leaving structure above $c_i$ intact.
-
-> *Simpler non-conserving variant*: subtract the fixed density $M_0(M_i)/A(M_i)$ uniformly and
-> floor at zero (no solve). This removes slightly less than $M_0(M_i)$ whenever the floor bites,
-> so global moment accounting drifts; use only if the $c_i$ solve is a bottleneck.
+  so a gridded field (with summed-area-table queries) and a mesh-free evaluation (disk–disk
+  overlap areas) are exactly equivalent implementations; the grid is purely a performance choice.
 
 ### 1.5 Local Maximum Magnitude (Supportability)
 
@@ -119,17 +114,20 @@ $$
 \mathcal{M}(x, y, t;\, M) \;\ge\; M_0(M)
 $$
 
-The left side grows with the disk area ($\sim 10^{M}$), the right with released moment
-($\sim 10^{1.5M}$), so the right eventually dominates: there is a single upper crossing. The local
-maximum magnitude is the largest supportable magnitude:
+In a fully charged field the left side grows with the disk area ($\sim 10^{M}$), the right with
+released moment ($\sim 10^{1.5M}$), so the right eventually dominates. The local maximum magnitude
+is the largest supportable magnitude:
 
 $$
 M_{\max}(x, y, t) = \sup \left\{ M \ge M_{\min} \;:\; \mathcal{M}(x, y, t;\, M) \ge M_0(M) \right\}
 $$
 
-This is a 1-D root-find for $\mathcal{M}(x,y,t;M) = M_0(M)$ (bisection on $M$ from above). If even
-$M = M_{\min}$ is not supportable ($\mathcal{M}(x,y,t;M_{\min}) < M_0(M_{\min})$), the location is
-**locked**: no event can occur there until tectonic loading recharges the surrounding region.
+Note the integrand $F$ is **signed** (§1.4): deficit pockets inside the disk subtract from the
+enclosed moment, so $\mathcal{M}(M)$ need not be monotone in $M$ and the supportability condition
+can have multiple crossings. $M_{\max}$ is the *largest* crossing — numerically, scan $M$ downward
+from a global upper bound (e.g. the fully-charged $M_{\max}$) and bisect the first sign change. If
+even $M = M_{\min}$ is not supportable ($\mathcal{M}(x,y,t;M_{\min}) < M_0(M_{\min})$), the
+location is **locked**: the effective rate there is zero until loading repays the deficit.
 
 Because $M_{\max}$ integrates moment over a region rather than a single cell, an isolated charged
 cell no longer bottlenecks event size, and the largest possible earthquake is set by the regional
@@ -137,9 +135,10 @@ budget — not by grid resolution.
 
 ### 1.6 Field Trajectory
 
-A point's density is a **stochastic sawtooth**: linear recharge from loading, punctuated by
-fractional drops whenever it falls inside an event's rupture disk. Large events drop a broad
-neighborhood at once; dense swarms can collectively lock a region.
+A point's density is a **stochastic sawtooth**: linear recharge from loading, punctuated by a
+fixed drop of $M_0(M_i)/A(M_i)$ whenever it falls inside event $i$'s rupture disk. Large events
+drop a broad neighborhood at once and can drive it well below zero (deep deficit); dense swarms
+can collectively lock a region until loading repays the debt.
 
 ---
 
@@ -163,15 +162,23 @@ where $\beta = b \ln 10$.
 
 ## 3. Conditional Intensity (ETAS)
 
-The conditional intensity is the standard ETAS form — the moment field does **not** multiply the
-rate directly:
+The conditional intensity is the standard ETAS form, multiplied only by a **hard lock indicator**
+— zero rate where the budget cannot support even $M_{\min}$, untouched everywhere else:
 
 $$
-\lambda(t, x, y \mid \mathcal{H}_t) = \mu(x, y)
-+ \sum_{i:\, t_i < t} \nu(M_i)\, g(t - t_i)\, h(x - x_i,\, y - y_i;\, M_i)
+\lambda(t, x, y \mid \mathcal{H}_t) = \Big[ \mu(x, y)
++ \sum_{i:\, t_i < t} \nu(M_i)\, g(t - t_i)\, h(x - x_i,\, y - y_i;\, M_i) \Big]
+\cdot \mathbf{1}\big[ M_{\max}(x,y,t) \ge M_{\min} \big]
 $$
 
-The field's only influence on seismicity is through the **magnitude truncation** of §1.5–§2: a
+The indicator is not an extra mechanism — it is the statement that the truncated GR of §2 has
+empty support at locked locations, expressed at the rate level. **Thinning compatibility**: since
+the indicator lies in $\{0,1\}$, it only ever lowers the rate, so the ungated ETAS sum remains a
+valid thinning envelope; loading can flip a location from locked to unlocked between proposals,
+but that only raises $\lambda$ *toward* the envelope, never above it (see §6 Notes).
+
+Beyond the lock, the field's influence on seismicity is through the **magnitude truncation** of
+§1.5–§2: a
 depleted region can host only small events, and small events have low productivity $\nu(M)$, so
 the rate feedback is *emergent* rather than imposed. Concretely:
 
@@ -180,8 +187,8 @@ the rate feedback is *emergent* rather than imposed. Concretely:
 - But those small events seed few offspring (since $\nu(M) = K\,10^{\alpha(M-M_c)}$ falls steeply
   with magnitude), so the local branching ratio $n_{\text{local}} = \int \nu(M)\, f(M\mid\text{loc})\, dM$
   drops and the cascade dies out faster there.
-- When a region depletes all the way to $M_{\max} < M_{\min}$ it is **locked** (§1.5): events
-  there are skipped, giving a hard rate cutoff at full depletion.
+- When a region depletes all the way to $M_{\max} < M_{\min}$ it is **locked** (§1.5): the
+  indicator zeroes the rate there until loading repays the deficit.
 
 (An earlier draft multiplied $\lambda$ by a moment-availability gate $a(F)$; it was dropped because
 the truncation already supplies the rate feedback, the gate conflated the strain-budget timescale
@@ -223,10 +230,11 @@ offspring locations, $R(M)$ governs moment consumption.
 ## 4. Model Coupling
 
 ```
-ETAS  →  Field:   each event removes M₀(Mᵢ) from F over its rupture disk R(Mᵢ)
+ETAS  →  Field:   each event subtracts M₀(Mᵢ)/A(Mᵢ) from F over its rupture disk R(Mᵢ)
 Field →  size:    supportability Mmax(x,y,t) bounds the magnitude drawn at (x,y)
+Field →  rate:    hard lock only — λ = 0 where Mmax < Mmin (empty magnitude support)
 size  →  rate:    smaller events ⇒ lower productivity ν(M) ⇒ fewer offspring (emergent)
-Loading → Field:  continuous recharge Ṁ_load rebuilds the budget everywhere
+Loading → Field:  continuous recharge Ṁ_load rebuilds the budget (and repays deficits)
 ```
 
 The **marks** (magnitudes) are history-dependent through the shared field $F$ — the central
@@ -285,12 +293,11 @@ While t < T_max:
 
   5. Accept with probability  λ_true / λ_upper:
        YES →
-         Mmax(x,y,t) ← root_find{ M : enclosed_moment(x,y,R(M)) = M₀(M) }   (§1.5)
-         If Mmax < Mmin: skip (location locked, no supportable magnitude)
+         Mmax(x,y,t) ← largest M with enclosed_moment(x,y,R(M)) ≥ M₀(M)   (§1.5)
+         If Mmax < Mmin: reject (location locked — λ_eff = 0 here)
          Else:
            Draw magnitude:  M ~ truncated_GR(Mmin, Mmax(x,y,t), b)
-           Solve c:         ∫_{disk R(M)} min(F, c) dA = M₀(M)        (monotone in c)
-           Deplete field:   over disk R(M), F ← max(F − c, 0)
+           Deplete field:   over disk R(M), F −= M₀(M)/A(M)    (may go negative)
            Record event (t, x, y, M); append to Hₜ
        NO  → continue (thinned; no state change)
 
@@ -304,9 +311,12 @@ Return events, and optionally F snapshots over time
   whole grid.
 - **Field snapshots**: store $F$ at intervals for visualizing the evolving $M_{\max}$ map (which
   needs a root-find per cell, so compute it on a coarse grid).
-- The standard ETAS thinning bound applies unchanged — the field never raises the rate, so
-  $\lambda_{\text{true}} \le \lambda_{\text{upper}}$ always holds; depleted regions simply yield
-  locked candidates that get skipped at step 5.
+- **Thinning validity with the lock**: the lock indicator $\in \{0,1\}$ only ever lowers the true
+  rate, so the ungated ETAS envelope remains valid. Rejecting a locked candidate at step 5 is
+  equivalent to having evaluated $\lambda_{\text{true}} = 0$ there. Loading can *unlock* a region
+  between proposals (raising its rate from 0 back to the ETAS value), but never above the
+  envelope. The only cost is efficiency: a locked mainshock core still attracts proposals at full
+  Omori weight, all rejected.
 
 ---
 
@@ -314,8 +324,9 @@ Return events, and optionally F snapshots over time
 
 | Situation | Handling |
 |-----------|----------|
-| Enclosed moment $< M_0(M_{\min})$ at a point | $M_{\max} < M_{\min}$ → location locked; candidate skipped until surrounding region recharges |
-| Negative field density | Cannot occur: depletion floors at zero, $F \leftarrow \max(F - c, 0)$ (§1.4) |
+| Enclosed moment $< M_0(M_{\min})$ at a point | $M_{\max} < M_{\min}$ → location locked; rate clamped to zero until loading repays the deficit |
+| Negative field density | Allowed by design: a strain deficit (§1.4); prevented from producing events by the lock, not by a floor |
+| Non-monotone $\mathcal{M}(M)$ (deficit pockets in disk) | Multiple supportability crossings possible; take the largest (§1.5) |
 | Rupture disk extends past domain edge | Integrate/deplete only over the in-domain portion; the outside share of removed moment is lost (or use reflecting edges — config flag) |
 | Dense swarm | Cumulative depletion can lock a whole region → quiescence until recharge (emergent) |
 | $\lambda_{\text{upper}} < \lambda_{\text{true}}$ | Standard ETAS thinning guard; the field never raises the rate so the bound always holds |
@@ -351,10 +362,10 @@ moment_etas/
 
 | Test | Expected result |
 |------|-----------------|
-| **Moment accounting** | $\int_{\text{domain}} F_{\text{final}}\, dA = \int F_0\, dA + \dot{M}_{\text{load}}\, T \, \lvert\text{domain}\rvert - \sum_i M_0(M_i)$ (minus moment lost through domain edges) |
-| **Non-negativity** | $F(x,y,t) \ge 0$ everywhere, always (depletion floors at zero) |
+| **Moment accounting** | Exact: $\int_{\text{domain}} F_{\text{final}}\, dA = \int F_0\, dA + \dot{M}_{\text{load}}\, T \, \lvert\text{domain}\rvert - \sum_i M_0(M_i)$, up to disk area clipped at domain edges (trackable) |
+| **Grid ↔ closed form** | Gridded $F$ matches the superposition formula of §1.4 at any $(x,y,t)$ to quadrature accuracy |
 | **GR recovery** | With large $\dot{M}_{\text{load}}$ (near-static field), pooled magnitude histogram recovers input $b$ |
-| **Field sawtooth** | Plot $F$ at a fixed point over time: linear ramp with sharp fractional drops when nearby events occur |
+| **Field sawtooth** | Plot $F$ at a fixed point over time: linear ramp with fixed drops $M_0(M_i)/A(M_i)$ from covering events; may dip below zero after large events |
 | **Size suppression** | In a depleted region the local $M_{\max}$ (and the largest observed magnitude) drops; the local branching ratio $n_{\text{local}}$ falls and cascades die out faster — while small events persist |
 | **Large-event migration** | After a large event, the depleted core hosts only small aftershocks; larger aftershocks occur preferentially in the still-charged surrounding ring, infilling as the core recharges |
 | **Quiescence/recharge cycles** | Heavily ruptured regions show gaps in seismicity whose length $\propto \dot{M}_{\text{load}}^{-1}$ |
@@ -391,9 +402,13 @@ serve as the area an event draws from, is bounded by, and depletes. Key conseque
 - **Self-consistent loop**: bigger $M$ ⇒ bigger disk ⇒ more enclosed moment required *and* more
   consumed.
 - **Resolution-independent**: everything is an area integral of a density; the grid is only
-  quadrature.
-- **Non-negativity by construction**: depletion is a flat subtraction floored at zero,
-  $F \leftarrow \max(F - c, 0)$ with $c$ solved so the removed moment equals $M_0(M)$ (§1.4).
+  quadrature — and since depletion is linear (§1.4), the field even has a closed-form
+  superposition equal to the gridded version exactly.
+- **Signed field, clamped rate**: $F$ may go negative (strain deficit); the physical guarantee
+  is enforced at the rate level via the lock indicator (§3), not by flooring the field. An
+  earlier draft floored $F$ at zero with a conserving level-solve; it was dropped because the
+  floor broke linearity (and with it the superposition form) while the lock already prevents
+  events where the budget is overdrawn.
 - **Emergent realism**: large events leave broad depleted patches → wider quiescence and outward
   aftershock migration.
 
