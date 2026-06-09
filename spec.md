@@ -47,7 +47,7 @@ The field recharges everywhere at a constant rate:
 
 $$
 \frac{\partial F}{\partial t} = \dot{M}_{\text{load}}(x, y)
-\qquad [\,\text{N}\cdot\text{m} / \text{km}^2 / \text{yr}\,]
+\qquad [\,\text{N}\cdot\text{m} / \text{km}^2 / \text{day}\,]
 $$
 
 Spatially uniform ($\dot{M}_{\text{load}}(x,y) = \dot{M}_{\text{load}}$) for now; extensible to a
@@ -203,7 +203,7 @@ rupture zone.)
 ### 3.2 Background Rate
 
 $$
-\mu(x, y) = \mu_0 \qquad [\text{events / yr / km}^2] \quad (\text{spatially uniform for now})
+\mu(x, y) = \mu_0 \qquad [\text{events / day / km}^2] \quad (\text{spatially uniform for now})
 $$
 
 ### 3.3 Productivity
@@ -217,6 +217,10 @@ $$
 $$
 g(\tau) = \frac{p - 1}{c} \left(1 + \frac{\tau}{c}\right)^{-p}, \qquad \tau > 0
 $$
+
+Normalized to integrate to 1 over $(0, \infty)$, which **requires $p > 1$ strictly** — at $p = 1$
+the prefactor vanishes and the integral diverges (no proper density exists). Values just above 1
+are legal but very long-tailed (the mean delay diverges for $p \le 2$).
 
 ### 3.5 Spatial Triggering Kernel (Isotropic Power-Law)
 
@@ -250,6 +254,10 @@ it only *indirectly*, by forcing smaller (less productive) events in depleted re
 
 ## 5. Parameters
 
+**Time convention: all times are in days** — $t$, $\tau$, $c$, the simulation horizon
+$T_{\max}$, and all rates ($\mu_0$, $\dot{M}_{\text{load}}$) are per day. Annual quantities from
+the literature (e.g. tectonic loading per year) must be divided by 365.25 on input.
+
 | Symbol | Description | Units | Typical range |
 |--------|-------------|-------|---------------|
 | $M_{\min}$ | Completeness / minimum magnitude | — | 2.0 – 4.0 |
@@ -257,14 +265,14 @@ it only *indirectly*, by forcing smaller (less productive) events in depleted re
 | **Field** | | | |
 | $\Delta$ | Grid cell size (quadrature resolution) | km | 1 – 10 |
 | $F_0$ | Initial moment density (sets initial $M_{\max}$) | N·m / km² | region-specific |
-| $\dot{M}_{\text{load}}$ | Tectonic moment loading rate (density) | N·m / km² / yr | region-specific |
+| $\dot{M}_{\text{load}}$ | Tectonic moment loading rate (density) | N·m / km² / day | region-specific |
 | $A_0$ | Rupture area at $M_c$ (sets $R(M)$) | km² | ~ 1 – 100 |
 | **ETAS** | | | |
-| $\mu_0$ | Background rate | events/yr/km² | region-specific |
+| $\mu_0$ | Background rate | events/day/km² | region-specific |
 | $K$ | Productivity amplitude | — | 0.01 – 0.1 |
 | $\alpha$ | Productivity magnitude scaling | — | 0.5 – 2.0 |
 | $c$ | Omori time offset | days | 0.001 – 1.0 |
-| $p$ | Omori temporal decay exponent | — | 1.0 – 1.5 |
+| $p$ | Omori temporal decay exponent | — | 1.05 – 1.5 (strictly $p > 1$) |
 | $D$ | Triggering spatial scale at $M_c$ | km | 1 – 20 |
 | $\gamma$ | Triggering spatial magnitude scaling | — | 0.3 – 1.0 |
 | $q$ | Triggering spatial power-law exponent | — | 1.5 – 2.5 |
