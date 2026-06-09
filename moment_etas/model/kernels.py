@@ -1,5 +1,37 @@
-"""ETAS triggering kernels (spec §3.3-3.5).
+"""ETAS triggering kernels: productivity and inverse-CDF samplers (spec §3.3-3.5, §6).
 
-Omori-Utsu temporal kernel (requires p > 1 strictly), isotropic power-law
-spatial kernel, and exponential productivity law. All times in days.
+The branching simulator samples offspring delays and displacements directly
+from the normalized Omori-Utsu and power-law spatial kernels; no densities or
+envelopes are needed for simulation. All times in days, distances in km.
 """
+
+import numpy as np
+
+
+def productivity(m, k, alpha, m_min):
+    """Expected direct offspring count ν(M) = K 10^(α (M − Mc)), Mc = m_min."""
+    return k * 10.0 ** (alpha * (np.asarray(m) - m_min))
+
+
+def sample_omori(rng: np.random.Generator, n: int, c: float, p: float) -> np.ndarray:
+    """Delays τ from g(τ) = (p−1)/c (1 + τ/c)^(−p) via inverse CDF."""
+    u = rng.random(n)
+    return c * (u ** (-1.0 / (p - 1.0)) - 1.0)
+
+
+def spatial_scale(m, d_km, gamma, m_min):
+    """Magnitude-dependent triggering scale d(M) = D 10^(γ (M − Mc) / 2), km."""
+    return d_km * 10.0 ** (gamma * (np.asarray(m) - m_min) / 2.0)
+
+
+def sample_displacement(
+    rng: np.random.Generator, n: int, d: float, q: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Offspring displacements (dx, dy) from the isotropic power-law kernel.
+
+    Radial inverse CDF of h(r) (2πr-weighted): r = d sqrt(u^(−1/(q−1)) − 1).
+    """
+    u = rng.random(n)
+    r = d * np.sqrt(u ** (-1.0 / (q - 1.0)) - 1.0)
+    theta = rng.uniform(0.0, 2.0 * np.pi, n)
+    return r * np.cos(theta), r * np.sin(theta)

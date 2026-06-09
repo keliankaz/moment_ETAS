@@ -7,4 +7,9 @@ Time convention: all times in days. All field quantities are moment densities
 in N·m / km².
 """
 
+from .params import DM, Params
+from .simulation.simulate import Catalog, simulate_catalog
+
 __version__ = "0.1.0"
+
+__all__ = ["DM", "Params", "Catalog", "simulate_catalog"]
