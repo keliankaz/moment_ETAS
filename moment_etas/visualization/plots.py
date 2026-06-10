@@ -1,10 +1,15 @@
 """Plotting helpers (spec §8): field maps, Mmax maps, space-time plots, GR, sawtooth."""
 
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import CenteredNorm, LogNorm
-
 from ..params import DM
+
+
+def marker_size(m, m_min):
+    """Shared marker-area scaling for magnitude, so scatter plots compare."""
+    return 2.0 * 2.0 ** (np.asarray(m) - m_min)
 
 
 def magnitude_time(cat, ax=None):
@@ -25,7 +30,7 @@ def space_time(cat, ax=None):
     """x-coordinate vs time, marker size by magnitude (fault-diagram style)."""
     if ax is None:
         _, ax = plt.subplots(figsize=(9, 4))
-    s = 2.0 * 2.0 ** (cat.m - cat.params.m_min)
+    s = marker_size(cat.m, cat.params.m_min)
     sc = ax.scatter(cat.t / 365.25, cat.x, s=s, c=cat.m, cmap="viridis", alpha=0.7)
     plt.colorbar(sc, ax=ax, label="magnitude")
     ax.set(xlabel="time (yr)", ylabel="x (km)", title="space-time")
@@ -36,7 +41,7 @@ def epicenter_map(cat, ax=None):
     """Map view of epicenters, size by magnitude."""
     if ax is None:
         _, ax = plt.subplots(figsize=(5.5, 5))
-    s = 2.0 * 2.0 ** (cat.m - cat.params.m_min)
+    s = marker_size(cat.m, cat.params.m_min)
     sc = ax.scatter(cat.x, cat.y, s=s, c=cat.t / 365.25, cmap="plasma", alpha=0.7)
     plt.colorbar(sc, ax=ax, label="time (yr)")
     ax.set(xlabel="x (km)", ylabel="y (km)", title="epicenters",
@@ -86,13 +91,19 @@ def magnitude_distribution(cat, ax=None):
 
 
 def field_map(cat, t=None, ax=None):
-    """Map of the moment density field F(x, y, t); defaults to the final state."""
+    """Map of the moment density field F(x, y, t); defaults to the final state.
+
+    For intermediate t the field is replayed from the catalog (cat.field_at),
+    so the map shows only depletions that had occurred by t.
+    """
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 5))
     p = cat.params
     if t is None:
         t = cat.t.max() if len(cat) else 0.0
-    f = cat.field.field(t)
+        f = cat.field.field(t)
+    else:
+        f = cat.field_at(t).field(t)
     im = ax.imshow(f.T, origin="lower", extent=(0, p.lx, 0, p.ly), cmap="RdBu",
                    norm=CenteredNorm(vcenter=0.0))
     plt.colorbar(im, ax=ax, label="F (N·m/km²)")
@@ -101,21 +112,30 @@ def field_map(cat, t=None, ax=None):
 
 
 def mmax_map(cat, t=None, coarse=4, ax=None):
-    """Map of local Mmax via the supportability bin scan on a coarsened grid."""
+    """Map of local Mmax via the supportability bin scan on a coarsened grid.
+
+    Locked locations (no supportable magnitude) are drawn black. For
+    intermediate t the field is replayed from the catalog (cat.field_at).
+    """
     if ax is None:
         _, ax = plt.subplots(figsize=(6, 5))
     p = cat.params
     if t is None:
         t = cat.t.max() if len(cat) else 0.0
+        fld = cat.field
+    else:
+        fld = cat.field_at(t)
     xs = np.arange(coarse * p.cell / 2, p.lx, coarse * p.cell)
     ys = np.arange(coarse * p.cell / 2, p.ly, coarse * p.cell)
     mm = np.full((len(xs), len(ys)), np.nan)
     for i, x in enumerate(xs):
         for j, y in enumerate(ys):
-            k = cat.field.local_kmax(x, y, t)
+            k = fld.local_kmax(x, y, t)
             if k >= 0:
                 mm[i, j] = p.m_min + k * DM
-    im = ax.imshow(mm.T, origin="lower", extent=(0, p.lx, 0, p.ly), cmap="magma")
+
+    cmap = mpl.colormaps["magma"].with_extremes(bad="k")
+    im = ax.imshow(mm.T, origin="lower", extent=(0, p.lx, 0, p.ly), cmap=cmap)
     plt.colorbar(im, ax=ax, label="local Mmax")
     ax.set(xlabel="x (km)", ylabel="y (km)", title=f"supportable Mmax, t = {t/365.25:.1f} yr")
     return ax
@@ -164,8 +184,6 @@ def field_animation(cat, path="field_evolution.gif", t_start=None, t_end=None,
     """
     from matplotlib.animation import FuncAnimation, PillowWriter
 
-    from ..model.moment_field import GriddedField
-
     p = cat.params
     if t_end is None:
         t_end = float(cat.t.max()) if len(cat) else 0.0
@@ -173,17 +191,10 @@ def field_animation(cat, path="field_evolution.gif", t_start=None, t_end=None,
         t_start = 0.8 * t_end
     frame_times = np.linspace(t_start, t_end, n_frames)
 
-    # replay depletions: pre-roll everything before t_start, then advance
-    # the event pointer incrementally between frames
-    fld = GriddedField(p)
-    order = np.argsort(cat.t, kind="stable")
-    te, xe, ye, me = cat.t[order], cat.x[order], cat.y[order], cat.m[order]
-    ptr = 0
-    frames = np.empty((n_frames, fld.nx, fld.ny), dtype=np.float32)
-    for f, tf in enumerate(frame_times):
-        while ptr < len(te) and te[ptr] <= tf:
-            fld.deplete(xe[ptr], ye[ptr], me[ptr])
-            ptr += 1
+    frames = None
+    for f, (tf, fld) in enumerate(cat.iter_fields(frame_times)):
+        if frames is None:
+            frames = np.empty((n_frames, fld.nx, fld.ny), dtype=np.float32)
         frames[f] = fld.field(tf)
 
     vmax = max(abs(float(frames.min())), abs(float(frames.max())))

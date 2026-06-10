@@ -19,7 +19,11 @@ from ..model.moment_field import GriddedField, MomentField
 
 @dataclass
 class Catalog:
-    """Simulation result: event arrays plus bookkeeping."""
+    """Simulation result: event arrays plus bookkeeping.
+
+    Invariant: events are stored in chronological order (they are recorded in
+    pop order from the time-keyed queue), so replays can scan linearly.
+    """
 
     t: np.ndarray
     x: np.ndarray
@@ -34,6 +38,35 @@ class Catalog:
     def __len__(self) -> int:
         return len(self.t)
 
+    def field_at(self, t: float) -> GriddedField:
+        """Reconstruct the moment field at time t by replaying depletions.
+
+        Exact: applies the same deplete() rules the simulation used, for all
+        events with t_i <= t (spec §6 Notes, field at intermediate times).
+        """
+        fld = GriddedField(self.params)
+        for te, xe, ye, me in zip(self.t, self.x, self.y, self.m):
+            if te > t:
+                break
+            fld.deplete(xe, ye, me)
+        return fld
+
+    def iter_fields(self, times):
+        """Yield (t, field) at each time in ascending `times`, replaying
+        depletions incrementally between yields.
+
+        The same GriddedField instance is yielded every time — copy what you
+        need (e.g. field.field(t)) before advancing.
+        """
+        fld = GriddedField(self.params)
+        ptr = 0
+        n = len(self.t)
+        for tf in times:
+            while ptr < n and self.t[ptr] <= tf:
+                fld.deplete(self.x[ptr], self.y[ptr], self.m[ptr])
+                ptr += 1
+            yield tf, fld
+
 
 def simulate_catalog(
     params: Params,
@@ -42,6 +75,7 @@ def simulate_catalog(
     snapshot_every: float | None = None,
 ) -> Catalog:
     """Run the branching simulation for t_max days. Times in days, coords in km."""
+    params.validate()   # fields are often mutated after construction
     rng = np.random.default_rng(seed)
     fld = GriddedField(params)
 

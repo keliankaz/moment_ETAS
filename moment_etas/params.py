@@ -34,10 +34,29 @@ class Params:
     q: float = 1.8          # spatial power-law exponent (> 1 strictly)
 
     def __post_init__(self):
+        self.validate()
+
+    def validate(self) -> None:
+        """Check parameter constraints.
+
+        Called at construction and again by simulate_catalog, since fields are
+        commonly mutated after construction (which skips __post_init__).
+        """
         if self.p <= 1:
             raise ValueError(f"Omori p must be > 1 strictly, got {self.p}")
         if self.q <= 1:
             raise ValueError(f"spatial q must be > 1 strictly, got {self.q}")
+        if self.b <= 0:
+            raise ValueError(f"GR b must be positive, got {self.b}")
+        if self.tau_max is not None and self.tau_max <= 0:
+            raise ValueError(f"tau_max must be positive or None, got {self.tau_max}")
+        for extent, name in ((self.lx, "lx"), (self.ly, "ly")):
+            n = extent / self.cell
+            if abs(n - round(n)) > 1e-9:
+                raise ValueError(
+                    f"cell={self.cell} must divide {name}={extent} evenly "
+                    f"(grid extent would mismatch the domain)"
+                )
 
     @property
     def area(self) -> float:
