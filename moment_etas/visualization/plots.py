@@ -5,6 +5,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import CenteredNorm, LogNorm
 from ..params import DM
+from ..model.rupture import rupture_radius
 
 
 def marker_size(m, m_min):
@@ -173,7 +174,8 @@ def field_sawtooth(cat, x, y, n_t=2000, ax=None):
 
 
 def field_animation(cat, path="field_evolution.gif", t_start=None, t_end=None,
-                    n_frames=80, fps=10, cmap="RdBu"):
+                    n_frames=80, fps=10, cmap="RdBu", show_events=True,
+                    flash_sec=1.0 / 3.0, flash_m_min=None):
     """Write a GIF of the moment field F(x, y, t) over [t_start, t_end].
 
     The field is reconstructed by replaying the catalog's depletions into a
@@ -181,6 +183,13 @@ def field_animation(cat, path="field_evolution.gif", t_start=None, t_end=None,
     needed and any time window works. Defaults to the last 20% of the run.
     Times in days; the duration covered and frame count set the GIF size, so
     keep n_frames modest for fine grids.
+
+    With show_events, each earthquake flashes as a black circle outlining its
+    rupture disk R(M) (floored at a small visible radius) for ~flash_sec of
+    GIF time after it occurs. Note flash_sec is GIF time: with sparse frames
+    it can span years of model time, so dense aftershock bursts flash as a
+    cloud of circles — set flash_m_min to outline only events at or above
+    that magnitude.
     """
     from matplotlib.animation import FuncAnimation, PillowWriter
 
@@ -197,18 +206,39 @@ def field_animation(cat, path="field_evolution.gif", t_start=None, t_end=None,
             frames = np.empty((n_frames, fld.nx, fld.ny), dtype=np.float32)
         frames[f] = fld.field(tf)
 
+    # events flash for flash_sec of GIF time => this much model time:
+    frame_dt = (t_end - t_start) / max(n_frames - 1, 1)
+    flash_dt = max(1, round(flash_sec * fps)) * frame_dt
+    sel = (cat.t > t_start - flash_dt) & (cat.t <= t_end)
+    if flash_m_min is not None:
+        sel &= cat.m >= flash_m_min
+    ev_t, ev_x, ev_y = cat.t[sel], cat.x[sel], cat.y[sel]
+    ev_r = np.maximum(rupture_radius(cat.m[sel], p.a0, p.m_min), 0.004 * p.lx)
+
     vmax = max(abs(float(frames.min())), abs(float(frames.max())))
     fig, ax = plt.subplots(figsize=(6, 5))
     im = ax.imshow(frames[0].T, origin="lower", extent=(0, p.lx, 0, p.ly),
                    cmap=cmap, vmin=-vmax, vmax=vmax)
     plt.colorbar(im, ax=ax, label="F (N·m/km²)")
-    ax.set(xlabel="x (km)", ylabel="y (km)")
+    ax.set(xlabel="x (km)", ylabel="y (km)", xlim=(0, p.lx), ylim=(0, p.ly))
     title = ax.set_title("")
+    circles = []
 
     def draw(f):
         im.set_data(frames[f].T)
         title.set_text(f"moment density, t = {frame_times[f]/365.25:.1f} yr")
-        return im, title
+        for c in circles:
+            c.remove()
+        circles.clear()
+        if show_events:
+            tf = frame_times[f]
+            active = (ev_t <= tf) & (ev_t > tf - flash_dt)
+            for x, y, r in zip(ev_x[active], ev_y[active], ev_r[active]):
+                c = plt.Circle((x, y), r, fill=False, edgecolor="k",
+                               lw=0.6, alpha=0.6)
+                ax.add_patch(c)
+                circles.append(c)
+        return [im, title, *circles]
 
     anim = FuncAnimation(fig, draw, frames=n_frames, blit=False)
     anim.save(path, writer=PillowWriter(fps=fps))
