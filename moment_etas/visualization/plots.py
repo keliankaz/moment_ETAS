@@ -152,6 +152,59 @@ def field_sawtooth(cat, x, y, n_t=2000, ax=None):
     return ax
 
 
+def field_animation(cat, path="field_evolution.gif", t_start=None, t_end=None,
+                    n_frames=80, fps=10, cmap="RdBu"):
+    """Write a GIF of the moment field F(x, y, t) over [t_start, t_end].
+
+    The field is reconstructed by replaying the catalog's depletions into a
+    fresh grid (exact — same rules as the simulation), so no snapshots are
+    needed and any time window works. Defaults to the last 20% of the run.
+    Times in days; the duration covered and frame count set the GIF size, so
+    keep n_frames modest for fine grids.
+    """
+    from matplotlib.animation import FuncAnimation, PillowWriter
+
+    from ..model.moment_field import GriddedField
+
+    p = cat.params
+    if t_end is None:
+        t_end = float(cat.t.max()) if len(cat) else 0.0
+    if t_start is None:
+        t_start = 0.8 * t_end
+    frame_times = np.linspace(t_start, t_end, n_frames)
+
+    # replay depletions: pre-roll everything before t_start, then advance
+    # the event pointer incrementally between frames
+    fld = GriddedField(p)
+    order = np.argsort(cat.t, kind="stable")
+    te, xe, ye, me = cat.t[order], cat.x[order], cat.y[order], cat.m[order]
+    ptr = 0
+    frames = np.empty((n_frames, fld.nx, fld.ny), dtype=np.float32)
+    for f, tf in enumerate(frame_times):
+        while ptr < len(te) and te[ptr] <= tf:
+            fld.deplete(xe[ptr], ye[ptr], me[ptr])
+            ptr += 1
+        frames[f] = fld.field(tf)
+
+    vmax = max(abs(float(frames.min())), abs(float(frames.max())))
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(frames[0].T, origin="lower", extent=(0, p.lx, 0, p.ly),
+                   cmap=cmap, vmin=-vmax, vmax=vmax)
+    plt.colorbar(im, ax=ax, label="F (N·m/km²)")
+    ax.set(xlabel="x (km)", ylabel="y (km)")
+    title = ax.set_title("")
+
+    def draw(f):
+        im.set_data(frames[f].T)
+        title.set_text(f"moment density, t = {frame_times[f]/365.25:.1f} yr")
+        return im, title
+
+    anim = FuncAnimation(fig, draw, frames=n_frames, blit=False)
+    anim.save(path, writer=PillowWriter(fps=fps))
+    plt.close(fig)
+    return path
+
+
 def overview(cat):
     """Six-panel summary figure."""
     fig = plt.figure(figsize=(14, 10))
