@@ -293,7 +293,8 @@ the literature (e.g. tectonic loading per year) must be divided by 365.25 on inp
 
 | Symbol | Description | Units | Typical range |
 |--------|-------------|-------|---------------|
-| $M_{\min}$ | Completeness / minimum magnitude | — | 2.0 – 4.0 |
+| $M_{\min}$ | Simulation cutoff: GR lower bound, bin origin | — | 2.0 – 4.0 |
+| $M_c$ (`m_ref`) | Reference magnitude anchoring $A_0$, $K$, $D$ | — | $= M_{\min}$ by default, but decoupled: raising $M_{\min}$ must not silently recalibrate the scaling laws |
 | $b$ | GR b-value | — | 0.8 – 1.2 |
 | **Domain** | | | |
 | $L_x \times L_y$ | Domain extent | km | default 100 × 100 |
@@ -327,6 +328,9 @@ $$
 $$
 n(\Delta_M) = K\, b \ln 10 \cdot \frac{\Delta_M}{1 - 10^{-b\Delta_M}} \qquad (\alpha = b).
 $$
+
+(If $M_c$ is decoupled from $M_{\min}$, replace $K$ by $K\,10^{\alpha(M_{\min} - M_c)}$ in these
+formulas.)
 
 $n(\Delta_M)$ is increasing in the gap, so a well-charged region can be locally supercritical
 ($n > 1$). This is left **unguarded by design**: the supercritical contribution comes from the

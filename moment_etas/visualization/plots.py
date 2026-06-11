@@ -50,16 +50,17 @@ def epicenter_map(cat, ax=None):
     return ax
 
 
-def epicenter_density(cat, bin_km=2.0, m_min=None, ax=None):
+def epicenter_density(cat, bin_km=2.0, m_filter=None, ax=None):
     """Heat map of epicentral locations (counts per bin, log color scale).
 
-    Useful when the catalog is too dense for a scatter. Optional m_min
-    restricts to events at or above that magnitude.
+    Useful when the catalog is too dense for a scatter. Optional m_filter
+    restricts to events at or above that magnitude (display filter only —
+    distinct from the simulation cutoff params.m_min).
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(5.5, 5))
     p = cat.params
-    sel = slice(None) if m_min is None else cat.m >= m_min
+    sel = slice(None) if m_filter is None else cat.m >= m_filter
     h, _, _ = np.histogram2d(
         cat.x[sel], cat.y[sel],
         bins=(np.arange(0, p.lx + bin_km, bin_km), np.arange(0, p.ly + bin_km, bin_km)),
@@ -68,7 +69,7 @@ def epicenter_density(cat, bin_km=2.0, m_min=None, ax=None):
                    extent=(0, p.lx, 0, p.ly), cmap="inferno",
                    norm=LogNorm(vmin=1, vmax=max(h.max(), 1)))
     plt.colorbar(im, ax=ax, label=f"events / {bin_km:g}×{bin_km:g} km²")
-    title = "epicentral density" if m_min is None else f"epicentral density (M ≥ {m_min:g})"
+    title = "epicentral density" if m_filter is None else f"epicentral density (M ≥ {m_filter:g})"
     ax.set(xlabel="x (km)", ylabel="y (km)", title=title,
            xlim=(0, p.lx), ylim=(0, p.ly), aspect="equal")
     return ax
@@ -213,7 +214,7 @@ def field_animation(cat, path="field_evolution.gif", t_start=None, t_end=None,
     if flash_m_min is not None:
         sel &= cat.m >= flash_m_min
     ev_t, ev_x, ev_y = cat.t[sel], cat.x[sel], cat.y[sel]
-    ev_r = np.maximum(rupture_radius(cat.m[sel], p.a0, p.m_min), 0.004 * p.lx)
+    ev_r = np.maximum(rupture_radius(cat.m[sel], p.a0, p.m_ref), 0.004 * p.lx)
 
     vmax = max(abs(float(frames.min())), abs(float(frames.max())))
     fig, ax = plt.subplots(figsize=(6, 5))

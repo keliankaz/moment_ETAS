@@ -9,7 +9,11 @@ DM = 0.1
 @dataclass
 class Params:
     # Magnitude
-    m_min: float = 3.0      # completeness / minimum magnitude (= Mc)
+    m_min: float = 3.0      # simulation cutoff: GR lower bound, bin origin
+    m_ref: float = 3.0      # reference magnitude Mc anchoring the scaling laws:
+                            # a0, k, d_km are the values AT m_ref. Decoupled from
+                            # m_min so raising the catalog floor does not silently
+                            # recalibrate rupture areas, productivity, or d(M).
     b: float = 1.0          # GR b-value
 
     # Domain
@@ -20,16 +24,16 @@ class Params:
     # Field
     f0: float = 2.0e16      # initial moment density, N·m/km² (~ supports M6.5)
     mdot: float = 5.0e11    # loading rate, N·m/km²/day (~ recharge M6.5 in ~100 yr)
-    a0: float = 0.1         # rupture area at m_min, km² (A ≈ 10^(M−4) km²)
+    a0: float = 0.1         # rupture area at m_ref, km² (A ≈ 10^(M−4) km²)
 
     # ETAS
     mu0: float = 1.0e-6     # background rate, events/day/km²
-    k: float = 0.05         # productivity amplitude
+    k: float = 0.05         # productivity amplitude at m_ref
     alpha: float = 1.0      # productivity magnitude scaling
     c: float = 0.01         # Omori offset, days
     p: float = 1.2          # Omori exponent (> 1 strictly)
     tau_max: float = 36525.0  # aftershock delay cutoff, days (100 yr); None = untruncated
-    d_km: float = 1.0       # triggering spatial scale at m_min, km
+    d_km: float = 1.0       # triggering spatial scale at m_ref, km
     gamma: float = 0.5      # triggering spatial magnitude scaling
     q: float = 1.8          # spatial power-law exponent (> 1 strictly)
 

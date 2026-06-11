@@ -50,7 +50,7 @@ class GriddedField(MomentField):
         # hard stop for the supportability scan: disk would swallow the domain
         r_domain = max(params.lx, params.ly)
         m_hard = params.m_min
-        while rupture_radius(m_hard + DM, params.a0, params.m_min) < r_domain:
+        while rupture_radius(m_hard + DM, params.a0, params.m_ref) < r_domain:
             m_hard += DM
         self._k_hard = int(round((m_hard - params.m_min) / DM))
 
@@ -61,7 +61,7 @@ class GriddedField(MomentField):
         # accuracy; deplete() keeps exact epicenter geometry)
         ks = np.arange(self._k_hard + 1)
         mags = params.m_min + ks * DM
-        self._scan_radius = rupture_radius(mags, params.a0, params.m_min)
+        self._scan_radius = rupture_radius(mags, params.a0, params.m_ref)
         self._scan_m0 = moment(mags)
         self._scan_annuli = []
         r_max = int(np.ceil(self._scan_radius[-1] / params.cell))
@@ -116,7 +116,7 @@ class GriddedField(MomentField):
         in-domain cell fraction, eliminating discretization error in the moment
         budget. Sub-cell disks deposit their full moment into the host cell.
         """
-        r = rupture_radius(m, self.p.a0, self.p.m_min)
+        r = rupture_radius(m, self.p.a0, self.p.m_ref)
         i0, i1, j0, j1, mask, n_unclipped = self._disk_mask(x, y, r)
         if n_unclipped == 0:
             i, j = self.cell_index(x, y)
@@ -132,7 +132,7 @@ class GriddedField(MomentField):
         per-cell reconstruction of the field history; returns 0.0 if the cell
         is not covered. Keep the two methods in sync.
         """
-        r = rupture_radius(m, self.p.a0, self.p.m_min)
+        r = rupture_radius(m, self.p.a0, self.p.m_ref)
         i0, i1, j0, j1, mask, n_unclipped = self._disk_mask(x, y, r)
         if n_unclipped == 0:
             return moment(m) / self.cell_area if (i, j) == self.cell_index(x, y) else 0.0
