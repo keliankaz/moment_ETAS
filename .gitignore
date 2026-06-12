@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Office temp / lock files
+~$*
+
 # Python
 __pycache__/
 *.py[cod]
