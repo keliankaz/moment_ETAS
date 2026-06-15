@@ -28,7 +28,8 @@ discharges seismic moment when it ruptures (or is ruptured by a nearby event's f
 ### 1.1 The Field
 
 $F(x, y, t)$ — cumulative available seismic moment **density** (N·m / km²) at location $(x,y)$
-and time $t$.
+and time $t$. Its initial value $F_0(x, y)$ is a **spatial field** (a fault-proximity or
+geodetic precondition), with a uniform $F_0$ as the default special case.
 
 The field is stored on a grid of cell size $\Delta \times \Delta$, but the grid is only a
 quadrature mesh: every physical quantity is defined through *area integrals* of $F$, so the model
@@ -46,18 +47,19 @@ dyn·cm-convention constant misapplied to N·m.)
 
 ### 1.2 Tectonic Loading (Continuous)
 
-The field recharges everywhere at a constant rate:
+The field recharges at a **spatially varying but time-constant** rate:
 
 $$
 \frac{\partial F}{\partial t} = \dot{M}_{\text{load}}(x, y)
 \qquad [\,\text{N}\cdot\text{m} / \text{km}^2 / \text{day}\,]
 $$
 
-Spatially uniform ($\dot{M}_{\text{load}}(x,y) = \dot{M}_{\text{load}}$) for now; extensible to a
-strain-rate map. Over an interval $\Delta t$ with no events:
+$\dot{M}_{\text{load}}(x,y)$ is a fixed loading map (e.g. a geodetic strain-rate field), with a
+spatially uniform rate as the default special case. Because the rate is constant in time, over an
+interval $\Delta t$ with no events:
 
 $$
-F(x, y, t + \Delta t) = F(x, y, t) + \dot{M}_{\text{load}} \, \Delta t
+F(x, y, t + \Delta t) = F(x, y, t) + \dot{M}_{\text{load}}(x,y) \, \Delta t
 $$
 
 ### 1.3 Rupture Geometry
@@ -94,7 +96,7 @@ $$
   expressible ETAS-style as
 
 $$
-F(x,y,t) = F_0 + \dot{M}_{\text{load}}\, t
+F(x,y,t) = F_0(x,y) + \dot{M}_{\text{load}}(x,y)\, t
 - \sum_{i:\, t_i < t} \frac{M_0(M_i)}{A(M_i)}\,
 \mathbf{1}\!\big[\|(x,y) - (x_i,y_i)\| \le R(M_i)\big]
 $$
@@ -138,6 +140,23 @@ $M_k = M_{\min} + k\delta$ — $M_{\max}$ is the last bin before the first failu
 $\mathcal{M}(M_k) \ge M_0(M_k)$; no bisection or continuity care is needed. If even
 $M = M_{\min}$ is not supportable ($\mathcal{M}(x,y,t;M_{\min}) < M_0(M_{\min})$), the location is
 **locked**: the effective rate there is zero until loading repays the deficit.
+
+**Footprint exceeding the domain (moment-limited ceiling).** When the rupture disk grows past the
+domain extent, the enclosed integral $\mathcal{M}$ saturates: cells outside the domain contribute
+nothing (the disk is clipped, §7), so $\mathcal{M}$ is frozen at the domain *total*
+$\int_{\text{domain}} F\, dA$ while $M_0(M)$ keeps climbing. The ceiling is therefore set by the
+**total accumulated moment**, not the footprint:
+
+$$
+M_{\max} = M_0^{-1}\!\left( \int_{\text{domain}} F(x,y,t)\, dA \right)
+\quad\text{once the disk covers the domain.}
+$$
+
+A strongly charged or long-loaded domain can thus host an event whose footprint would exceed it —
+the rupture "fills the domain" and draws on all of its moment. (Implementation: the supportability
+scan runs geometrically out to the domain diagonal, then switches to this scalar moment-ceiling
+test; the earlier footprint cap under-reported $M_{\max}$ in the charged regime.) The "single upper
+crossing" still holds — released $10^{1.5M}$ always overtakes the bounded $\int F$.
 
 Because $M_{\max}$ integrates moment over a region rather than a single cell, an isolated charged
 cell no longer bottlenecks event size, and the largest possible earthquake is set by the regional
@@ -278,7 +297,8 @@ it only *indirectly*, by forcing smaller (less productive) events in depleted re
 ### 5.1 Spatial Domain
 
 A rectangle $[0, L_x] \times [0, L_y]$ (default $100 \times 100$ km), discretized at cell size
-$\Delta$ (default 1 km). Loading and background rate are uniform over it. Boundary conventions:
+$\Delta$ (default 1 km). The background rate is uniform over it; loading $\dot{M}_{\text{load}}(x,y)$
+and the initial field $F_0(x,y)$ may vary in space (§1.1–1.2). Boundary conventions:
 
 - **Triggered offspring** whose sampled location falls outside the domain are discarded
   (standard ETAS boundary leakage; keep the domain comfortably larger than the analysis region).
@@ -300,8 +320,8 @@ the literature (e.g. tectonic loading per year) must be divided by 365.25 on inp
 | $L_x \times L_y$ | Domain extent | km | default 100 × 100 |
 | $\Delta$ | Grid cell size (quadrature resolution) | km | 1 – 10 |
 | **Field** | | | |
-| $F_0$ | Initial moment density (sets initial $M_{\max}$) | N·m / km² | region-specific |
-| $\dot{M}_{\text{load}}$ | Tectonic moment loading rate (density) | N·m / km² / day | region-specific |
+| $F_0(x,y)$ | Initial moment density (sets initial $M_{\max}$); scalar or spatial field | N·m / km² | region-specific |
+| $\dot{M}_{\text{load}}(x,y)$ | Tectonic moment loading rate (density); scalar or spatial field | N·m / km² / day | region-specific |
 | $A_0$ | Rupture area at $M_c$ (sets $R(M)$) | km² | ~ 1 – 100 |
 | **ETAS** | | | |
 | $\mu_0$ | Background rate | events/day/km² | region-specific |
@@ -364,7 +384,7 @@ While queue not empty:
   pop earliest (t, x, y)
 
   1. Mmax(x,y,t) ← finite bin scan of supportability (§1.5), with
-       F(x', y', t) = F₀ + Ṁ_load · t − D(x', y')          (loading is lazy/analytic)
+       F(x', y', t) = F₀(x',y') + Ṁ_load(x',y') · t − D(x', y')   (loading is lazy/analytic)
   2. If no supportable bin: discard (location locked — this IS the lock indicator)
   3. Draw magnitude:  M ~ discrete truncated GR over bins [Mmin, Mmax]   (§2)
   4. Deplete:         D += M₀(M)/A(M) over the in-domain part of disk R(M)
@@ -391,9 +411,10 @@ Return events, plus optional F snapshots (reconstructable from D and t)
 - **No envelope, no rejection loop**: inverse-CDF sampling of $g$ and $h$ replaces thinning
   entirely; cost is $O(N \log N)$ in catalog size with no efficiency collapse as parents
   accumulate. (The locked-core pops are the only discarded work, and each costs one bin scan.)
-- **Lazy loading**: loading is uniform and deterministic, so the field never needs a loading
-  update — store only the depletion grid $D$ and evaluate
-  $F = F_0 + \dot{M}_{\text{load}}\,t - D$ at query time.
+- **Lazy loading**: the loading rate is deterministic and constant in time (even where it varies
+  in space), so the field never needs a loading update — store only the depletion grid $D$ and the
+  static baseline maps $F_0(x,y)$, $\dot{M}_{\text{load}}(x,y)$, then evaluate
+  $F = F_0(x,y) + \dot{M}_{\text{load}}(x,y)\,t - D$ at query time.
 - **Enclosed-moment queries**: direct masked disk sums over $D$'s cells (§8 build note); only one
   scan per popped event.
 - **Field snapshots**: store $D$ (or $F$) at intervals for visualizing the evolving $M_{\max}$
@@ -450,7 +471,7 @@ later as the cross-validation backend.
 
 | Test | Expected result |
 |------|-----------------|
-| **Moment accounting** | Exact: $\int_{\text{domain}} F_{\text{final}}\, dA = \int F_0\, dA + \dot{M}_{\text{load}}\, T \, \lvert\text{domain}\rvert - \sum_i M_0(M_i)$, up to disk area clipped at domain edges (trackable) |
+| **Moment accounting** | Exact: $\int_{\text{domain}} F_{\text{final}}\, dA = \int F_0(x,y)\, dA + T \int \dot{M}_{\text{load}}(x,y)\, dA - \sum_i M_0(M_i)$, up to disk area clipped at domain edges (trackable) |
 | **Grid ↔ closed form** | Gridded $F$ matches the superposition formula of §1.4 at any $(x,y,t)$ to quadrature accuracy |
 | **GR recovery** | With large $\dot{M}_{\text{load}}$ (near-static field), pooled magnitude histogram recovers input $b$ |
 | **Field sawtooth** | Plot $F$ at a fixed point over time: linear ramp with fixed drops $M_0(M_i)/A(M_i)$ from covering events; may dip below zero after large events |

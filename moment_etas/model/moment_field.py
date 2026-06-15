@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from ..params import DM, Params
-from .rupture import moment, rupture_radius
+from .rupture import magnitude_from_moment, moment, rupture_radius
 
 
 class MomentField(ABC):
@@ -59,8 +59,12 @@ class GriddedField(MomentField):
         ncells = self.nx * self.ny
         self._f0_domain = float(self.f0.sum()) if not f0_uniform else self.f0 * ncells
         self._mdot_domain = float(self.mdot.sum()) if not mdot_uniform else self.mdot * ncells
-        # hard stop for the supportability scan: disk would swallow the domain
-        r_domain = max(params.lx, params.ly)
+        # Extent of the geometric scan: the domain diagonal, so a disk of this
+        # radius covers the whole domain from ANY epicenter (even a corner).
+        # Beyond it the enclosed moment is frozen at the domain total and Mmax
+        # is moment-limited (handled analytically in local_kmax, spec §1.5).
+        # _k_hard is a geometric/memory bound now, not a correctness cap.
+        r_domain = float(np.hypot(params.lx, params.ly))
         m_hard = params.m_min
         while rupture_radius(m_hard + DM, params.a0, params.m_ref) < r_domain:
             m_hard += DM
@@ -231,6 +235,16 @@ class GriddedField(MomentField):
             if enclosed < self._scan_m0[kk]:
                 break
             k = kk
+        else:
+            # Still supportable at full-domain coverage: the enclosed moment is
+            # frozen at the domain total, so Mmax is moment-limited, not
+            # footprint-limited (spec §1.5). Take the largest bin the total
+            # accumulated moment can release.
+            m_total = (self._f0_domain + t * self._mdot_domain
+                       - float(self.depletion.sum())) * self.cell_area
+            if m_total > 0.0:
+                m_ceiling = magnitude_from_moment(m_total)
+                k = max(k, int(np.floor((m_ceiling - self.p.m_min) / DM + 1e-9)))
         return k
 
 
