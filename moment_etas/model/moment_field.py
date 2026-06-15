@@ -40,6 +40,11 @@ class MomentField(ABC):
 class GriddedField(MomentField):
     def __init__(self, params: Params):
         self.p = params
+        # Static baseline fields. Currently scalars; Stage 1 will resolve
+        # callables/arrays here. Everything reads self.f0/self.mdot, never
+        # params.f0/params.mdot directly.
+        self.f0 = params.f0
+        self.mdot = params.mdot
         self.nx = int(round(params.lx / params.cell))
         self.ny = int(round(params.ly / params.cell))
         self.cell_area = params.cell**2
@@ -77,7 +82,17 @@ class GriddedField(MomentField):
 
     def field(self, t: float) -> np.ndarray:
         """Full field F(x, y, t) on the grid (N·m/km²)."""
-        return self.p.f0 + self.p.mdot * t - self.depletion
+        return self.f0 + self.mdot * t - self.depletion
+
+    def baseline_at(self, i: int, j: int, t):
+        """Loading baseline F₀ + Ṁ_load·t at cell (i, j); t may be an array.
+
+        Single accessor for the local baseline so scalar and (Stage 1) grid
+        storage are handled in one place.
+        """
+        f0 = self.f0[i, j] if np.ndim(self.f0) else self.f0
+        md = self.mdot[i, j] if np.ndim(self.mdot) else self.mdot
+        return f0 + md * t
 
     def cell_index(self, x: float, y: float) -> tuple[int, int]:
         """Grid indices of the cell containing (x, y), clamped to the domain."""
@@ -145,10 +160,10 @@ class GriddedField(MomentField):
         if not mask.any():
             # disk smaller than a cell: use the host cell's density times disk area
             i, j = self.cell_index(x, y)
-            f = self.p.f0 + self.p.mdot * t - self.depletion[i, j]
+            f = self.baseline_at(i, j, t) - self.depletion[i, j]
             return f * np.pi * radius**2
         dep = self.depletion[i0:i1, j0:j1][mask]
-        f = self.p.f0 + self.p.mdot * t - dep
+        f = self.f0 + self.mdot * t - dep
         return f.sum() * self.cell_area
 
     def local_kmax(self, x: float, y: float, t: float) -> int:
@@ -159,9 +174,8 @@ class GriddedField(MomentField):
         scan costs one pass over the largest disk instead of one full disk sum
         per bin.
         """
-        p = self.p
         ci, cj = self.cell_index(x, y)
-        f_load = p.f0 + p.mdot * t
+        f_load = self.f0 + self.mdot * t
         n_in = 0
         dep_sum = 0.0
         k = -1
@@ -175,7 +189,7 @@ class GriddedField(MomentField):
                 dep_sum += float(self.depletion[ii[valid], jj[valid]].sum())
             if n_in == 0:
                 # disk smaller than a cell: host-cell density times disk area
-                f = f_load - self.depletion[ci, cj]
+                f = self.baseline_at(ci, cj, t) - self.depletion[ci, cj]
                 enclosed = f * np.pi * self._scan_radius[kk] ** 2
             else:
                 enclosed = (f_load * n_in - dep_sum) * self.cell_area

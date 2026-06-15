@@ -164,7 +164,7 @@ def field_sawtooth(cat, x, y, n_t=2000, ax=None):
 
     t_end = cat.t.max() if len(cat) else 1.0
     tt = np.linspace(0.0, t_end, n_t)
-    f = p.f0 + p.mdot * tt
+    f = np.asarray(fld.baseline_at(i, j, tt), dtype=float).copy()
     for te, lvl in drops:
         f[tt >= te] -= lvl
     ax.plot(tt / 365.25, f, lw=1)
