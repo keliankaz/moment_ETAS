@@ -40,11 +40,6 @@ class MomentField(ABC):
 class GriddedField(MomentField):
     def __init__(self, params: Params):
         self.p = params
-        # Static baseline fields. Currently scalars; Stage 1 will resolve
-        # callables/arrays here. Everything reads self.f0/self.mdot, never
-        # params.f0/params.mdot directly.
-        self.f0 = params.f0
-        self.mdot = params.mdot
         self.nx = int(round(params.lx / params.cell))
         self.ny = int(round(params.ly / params.cell))
         self.cell_area = params.cell**2
@@ -52,6 +47,18 @@ class GriddedField(MomentField):
         # cell-center coordinates
         self._xc = (np.arange(self.nx) + 0.5) * params.cell
         self._yc = (np.arange(self.ny) + 0.5) * params.cell
+
+        # Static baseline fields (spec §1.1-1.2): resolve scalar | callable |
+        # array to a scalar (uniform) or an (nx, ny) grid. All reads go through
+        # self.f0/self.mdot, never params.f0/params.mdot.
+        self.f0, f0_uniform = self._resolve_baseline(params.f0)
+        self.mdot, mdot_uniform = self._resolve_baseline(params.mdot)
+        self._uniform = f0_uniform and mdot_uniform
+        # domain cell-sums of the baselines (for the total-moment ceiling, §1.5):
+        # total domain moment at t = (f0_domain + t*mdot_domain - depletion.sum()) * cell_area
+        ncells = self.nx * self.ny
+        self._f0_domain = float(self.f0.sum()) if not f0_uniform else self.f0 * ncells
+        self._mdot_domain = float(self.mdot.sum()) if not mdot_uniform else self.mdot * ncells
         # hard stop for the supportability scan: disk would swallow the domain
         r_domain = max(params.lx, params.ly)
         m_hard = params.m_min
@@ -79,6 +86,20 @@ class GriddedField(MomentField):
             ii, jj = np.nonzero(ann)
             self._scan_annuli.append((oi[ii], oi[jj]))
             prev = disk
+
+    def _resolve_baseline(self, spec):
+        """Resolve a BaselineSpec to (value, is_uniform).
+
+        Scalar → passthrough (uniform); callable → evaluated on the cell-center
+        meshgrid; (nx, ny) array → used as-is.
+        """
+        if callable(spec):
+            xx, yy = np.meshgrid(self._xc, self._yc, indexing="ij")
+            return np.asarray(spec(xx, yy), dtype=float), False
+        arr = np.asarray(spec, dtype=float)
+        if arr.ndim == 0:
+            return float(arr), True
+        return arr, False
 
     def field(self, t: float) -> np.ndarray:
         """Full field F(x, y, t) on the grid (N·m/km²)."""
@@ -163,7 +184,9 @@ class GriddedField(MomentField):
             f = self.baseline_at(i, j, t) - self.depletion[i, j]
             return f * np.pi * radius**2
         dep = self.depletion[i0:i1, j0:j1][mask]
-        f = self.f0 + self.mdot * t - dep
+        f0 = self.f0[i0:i1, j0:j1][mask] if np.ndim(self.f0) else self.f0
+        md = self.mdot[i0:i1, j0:j1][mask] if np.ndim(self.mdot) else self.mdot
+        f = f0 + md * t - dep
         return f.sum() * self.cell_area
 
     def local_kmax(self, x: float, y: float, t: float) -> int:
@@ -175,7 +198,12 @@ class GriddedField(MomentField):
         per bin.
         """
         ci, cj = self.cell_index(x, y)
-        f_load = self.f0 + self.mdot * t
+        uniform = self._uniform
+        if uniform:
+            f_load = self.f0 + self.mdot * t   # scalar; fast path
+        else:
+            f0_sum = 0.0
+            mdot_sum = 0.0
         n_in = 0
         dep_sum = 0.0
         k = -1
@@ -185,14 +213,21 @@ class GriddedField(MomentField):
                 ii = ci + di
                 jj = cj + dj
                 valid = (ii >= 0) & (ii < self.nx) & (jj >= 0) & (jj < self.ny)
-                n_in += int(valid.sum())
-                dep_sum += float(self.depletion[ii[valid], jj[valid]].sum())
+                vi, vj = ii[valid], jj[valid]
+                n_in += vi.size
+                dep_sum += float(self.depletion[vi, vj].sum())
+                if not uniform:
+                    f0_sum += float(self.f0[vi, vj].sum()) if np.ndim(self.f0) \
+                        else self.f0 * vi.size
+                    mdot_sum += float(self.mdot[vi, vj].sum()) if np.ndim(self.mdot) \
+                        else self.mdot * vi.size
             if n_in == 0:
                 # disk smaller than a cell: host-cell density times disk area
                 f = self.baseline_at(ci, cj, t) - self.depletion[ci, cj]
                 enclosed = f * np.pi * self._scan_radius[kk] ** 2
             else:
-                enclosed = (f_load * n_in - dep_sum) * self.cell_area
+                base_sum = f_load * n_in if uniform else f0_sum + t * mdot_sum
+                enclosed = (base_sum - dep_sum) * self.cell_area
             if enclosed < self._scan_m0[kk]:
                 break
             k = kk
