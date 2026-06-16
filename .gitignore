@@ -37,6 +37,9 @@ htmlcov/
 .vscode/
 .idea/
 
+# Documents / drafts (kept local, not tracked)
+DOCS/
+
 # Simulation outputs (large / regenerable)
 output/
 outputs/
