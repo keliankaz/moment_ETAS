@@ -18,9 +18,9 @@ class Params:
     # Magnitude
     m_min: float = 3.0      # simulation cutoff: GR lower bound, bin origin
     m_ref: float = 3.0      # reference magnitude Mc anchoring the scaling laws:
-                            # a0, k, d_km are the values AT m_ref. Decoupled from
+                            # a0, k are the values AT m_ref. Decoupled from
                             # m_min so raising the catalog floor does not silently
-                            # recalibrate rupture areas, productivity, or d(M).
+                            # recalibrate rupture areas or productivity.
     b: float = 1.0          # GR b-value
 
     # Domain
@@ -40,8 +40,7 @@ class Params:
     c: float = 0.01         # Omori offset, days
     p: float = 1.2          # Omori exponent (> 1 strictly)
     tau_max: float = 36525.0  # aftershock delay cutoff, days (100 yr); None = untruncated
-    d_km: float = 1.0       # triggering spatial scale at m_ref, km
-    gamma: float = 0.5      # triggering spatial magnitude scaling
+    c_d: float = 1.0        # triggering scale as a multiple of rupture radius: d(M) = c_d·R(M)
     q: float = 1.8          # spatial power-law exponent (> 1 strictly)
 
     def __post_init__(self):

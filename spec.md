@@ -267,12 +267,14 @@ $G(\tau) = 1 - (1 + \tau/c)^{1-p}$ (a ~5% reduction at default parameters).
 $$
 h(r; M) = \frac{q - 1}{\pi\, d^2(M)} \left(1 + \frac{r^2}{d^2(M)}\right)^{-q},
 \qquad
-d(M) = D \, 10^{\gamma(M - M_c)/2} \quad [\text{km}]
+d(M) = c_d\, R(M) \quad [\text{km}]
 $$
 
-Note: the **triggering** kernel $h$ (where aftershocks are *placed*) and the **rupture disk**
-$R(M)$ (where moment is *removed*, §1.3–1.4) are distinct and have different scales — $h$ governs
-offspring locations, $R(M)$ governs moment consumption.
+The triggering scale is **coupled to the rupture radius**: $d(M) = c_d\,R(M)$, so the flat core
+(plateau, $r \lesssim d$) of $h$ shares the rupture-area magnitude scaling $10^{(M-M_c)/2}$ exactly
+(§1.3). $c_d$ sets the aftershock-zone size relative to the rupture ($c_d = 1 \Rightarrow d = R$).
+The kernel $h$ still governs *where offspring are placed*, distinct from $R(M)$ governing *moment
+consumption* (§1.3–1.4) — they share a scale but act on different processes.
 
 ---
 
@@ -330,8 +332,7 @@ the literature (e.g. tectonic loading per year) must be divided by 365.25 on inp
 | $c$ | Omori time offset | days | 0.001 – 1.0 |
 | $p$ | Omori temporal decay exponent | — | 1.05 – 1.5 (strictly $p > 1$) |
 | $\tau_{\max}$ | Aftershock delay cutoff | days | 36 525 (100 yr) |
-| $D$ | Triggering spatial scale at $M_c$ | km | 1 – 20 |
-| $\gamma$ | Triggering spatial magnitude scaling | — | 0.3 – 1.0 |
+| $c_d$ | Triggering scale as a multiple of rupture radius, $d(M) = c_d R(M)$ | — | 1 – 3 |
 | $q$ | Triggering spatial power-law exponent | — | 1.5 – 2.5 |
 
 ### 5.3 Criticality Note

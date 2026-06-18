@@ -122,7 +122,7 @@ def simulate_catalog(
         n_off = rng.poisson(productivity(m, params.k, params.alpha, params.m_ref))
         if n_off > 0:
             tau = sample_omori(rng, n_off, params.c, params.p)
-            d = spatial_scale(m, params.d_km, params.gamma, params.m_ref)
+            d = spatial_scale(m, params.c_d, params.a0, params.m_ref)
             dx, dy = sample_displacement(rng, n_off, d, params.q)
             for j in range(n_off):
                 if params.tau_max is not None and tau[j] > params.tau_max:

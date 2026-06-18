@@ -10,6 +10,8 @@ spec's Mc) — the scaling anchor, not the simulation cutoff m_min (see Params).
 
 import numpy as np
 
+from .rupture import rupture_radius
+
 
 def productivity(m, k, alpha, m_ref):
     """Expected direct offspring count ν(M) = k 10^(α (M − m_ref))."""
@@ -22,9 +24,14 @@ def sample_omori(rng: np.random.Generator, n: int, c: float, p: float) -> np.nda
     return c * (u ** (-1.0 / (p - 1.0)) - 1.0)
 
 
-def spatial_scale(m, d_km, gamma, m_ref):
-    """Magnitude-dependent triggering scale d(M) = d_km 10^(γ (M − m_ref) / 2), km."""
-    return d_km * 10.0 ** (gamma * (np.asarray(m) - m_ref) / 2.0)
+def spatial_scale(m, c_d, a0, m_ref):
+    """Triggering scale coupled to rupture geometry: d(M) = c_d · R(M), km.
+
+    The aftershock zone tracks the rupture radius (spec §3.5), so the plateau of
+    the spatial kernel shares the rupture-area magnitude scaling exactly; c_d is
+    its size relative to the rupture (c_d = 1 → d(M) = R(M)).
+    """
+    return c_d * rupture_radius(m, a0, m_ref)
 
 
 def sample_displacement(
