@@ -2,10 +2,11 @@
 
 The field is signed and linear in the event history:
 
-    F(x, y, t) = F0 + mdot * t - D(x, y)
+    F(x, y, t) = F0(x, y) + mdot(x, y) * t - D(x, y)
 
-where D is the accumulated depletion density. Loading is uniform and
-deterministic, so only D is stored ("lazy loading", spec §6 Notes).
+where D is the accumulated depletion density. F0 and the loading rate may vary
+in space but are constant in time, so only D evolves and is stored ("lazy
+loading", spec §6 Notes); F0/mdot are resolved to scalar-or-grid in __init__.
 
 ``GriddedField`` evaluates disk integrals by direct masked sums over cells
 (spec §8 build note: no summed-area table until profiling justifies one).

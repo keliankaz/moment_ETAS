@@ -92,6 +92,12 @@ $$
   budget cannot support even $M_{\min}$, the effective event rate is clamped to zero (§1.5, §3).
 - **Exact accounting**: every event removes exactly $M_0(M_i)$ (modulo disk area clipped at the
   domain edge). No solve is needed — depletion is linear in the event history.
+  *Discrete implementation note*: on the grid the level is $M_0(M_i)/(N\,\Delta^2)$, where $N$ is
+  the number of cell centers in the (unclipped) disk — i.e. the depletion is normalized by the
+  **discretized** disk area $N\Delta^2$ rather than the continuum $A(M_i)$. This makes the removed
+  moment exactly $M_0$ times the in-domain cell fraction at any resolution (the continuum
+  $M_0/A$ would leave an $O(\Delta)$ accounting error). A sub-cell disk deposits its full $M_0$
+  into the host cell.
 - **Closed-form superposition**: because loading and depletion are both linear, the field is
   expressible ETAS-style as
 
@@ -195,6 +201,8 @@ the same bins.
 ---
 
 ## 3. Conditional Intensity (ETAS)
+
+### 3.1 Intensity and the Lock Indicator
 
 The conditional intensity is the standard ETAS form, multiplied only by a **hard lock indicator**
 — zero rate where the budget cannot support even $M_{\min}$, untouched everywhere else:
@@ -316,7 +324,7 @@ the literature (e.g. tectonic loading per year) must be divided by 365.25 on inp
 | Symbol | Description | Units | Typical range |
 |--------|-------------|-------|---------------|
 | $M_{\min}$ | Simulation cutoff: GR lower bound, bin origin | — | 2.0 – 4.0 |
-| $M_c$ (`m_ref`) | Reference magnitude anchoring $A_0$, $K$, $D$ | — | $= M_{\min}$ by default, but decoupled: raising $M_{\min}$ must not silently recalibrate the scaling laws |
+| $M_c$ (`m_ref`) | Reference magnitude anchoring $A_0$, $K$ (and hence $R(M)$, $d(M)$) | — | $= M_{\min}$ by default, but decoupled: raising $M_{\min}$ must not silently recalibrate the scaling laws |
 | $b$ | GR b-value | — | 0.8 – 1.2 |
 | **Domain** | | | |
 | $L_x \times L_y$ | Domain extent | km | default 100 × 100 |
@@ -388,7 +396,8 @@ While queue not empty:
        F(x', y', t) = F₀(x',y') + Ṁ_load(x',y') · t − D(x', y')   (loading is lazy/analytic)
   2. If no supportable bin: discard (location locked — this IS the lock indicator)
   3. Draw magnitude:  M ~ discrete truncated GR over bins [Mmin, Mmax]   (§2)
-  4. Deplete:         D += M₀(M)/A(M) over the in-domain part of disk R(M)
+  4. Deplete:         D += M₀(M)/(N·Δ²) over the in-domain disk cells (N = unclipped
+                      cell count, so exactly M₀ is removed; sub-cell → host cell) (§1.4)
   5. Record event (t, x, y, M)
   6. Spawn offspring:
        N_off ~ Poisson(ν(M))
@@ -444,27 +453,30 @@ Return events, plus optional F snapshots (reconstructable from D and t)
 ├── environment.yml               ← conda env (installs package editable)
 ├── pyproject.toml                ← package metadata
 ├── moment_etas/                  ← installable package
+│   ├── params.py                 ← Params dataclass + validate(); DM (bin width); BaselineSpec
 │   ├── model/
-│   │   ├── moment_field.py       ← MomentField interface + GriddedField (summed-area table)
-│   │   │                           and AnalyticField (closed-form disk overlaps) backends;
-│   │   │                           load(), deplete(), enclosed_moment(), local_mmax()
-│   │   ├── magnitude.py          ← truncated_gr_sample(), truncated_gr_pdf()
-│   │   ├── rupture.py            ← rupture_area A(M), rupture_radius R(M)
-│   │   ├── kernels.py            ← omori/spatial inverse-CDF samplers, productivity()
-│   │   └── intensity.py          ← conditional_intensity() — not used by the simulator
-│   │                               (branching needs no rate evaluation); kept for diagnostics
+│   │   ├── moment_field.py       ← MomentField interface + GriddedField (direct masked disk
+│   │   │                           sums + precomputed annuli); AnalyticField stub (deferred).
+│   │   │                           deplete(), enclosed_moment(), local_kmax(), field(), field_at via Catalog
+│   │   ├── magnitude.py          ← gr_pmf(), sample_magnitude()
+│   │   ├── rupture.py            ← moment()/magnitude_from_moment(), rupture_area/_radius
+│   │   ├── kernels.py            ← productivity(), sample_omori(), spatial_scale(), sample_displacement()
+│   │   └── intensity.py          ← stub (docstring only); the branching simulator needs no
+│   │                               rate evaluation — kept as a placeholder for future diagnostics
 │   ├── simulation/
-│   │   └── simulate.py           ← simulate_catalog() — chronological branching (§6)
+│   │   └── simulate.py           ← simulate_catalog(), Catalog (field_at/iter_fields) — branching (§6)
 │   └── visualization/
-│       └── plots.py              ← field_animation(), mmax_map(), space_time_plot(), mag_dist()
+│       └── plots.py              ← field_map(), mmax_map(), field_animation(), space_time(),
+│                                   epicenter_density(), magnitude_distribution(), field_sawtooth(), overview()
+├── tests/                        ← characterization, spatial-baseline, moment-limited-Mmax
 └── notebooks/
     └── 01_exploration.ipynb      ← interactive sandbox
 ```
 
-The two field backends implement one interface; their agreement on identical simulations is the
-primary correctness check (§9, grid ↔ closed form). **Build order**: `GriddedField` first (with
-direct masked disk sums — no summed-area table until profiling justifies one); `AnalyticField`
-later as the cross-validation backend.
+**Build order**: `GriddedField` first (direct masked disk sums — no summed-area table until
+profiling justifies one); `AnalyticField` (closed-form disk overlaps) is **deferred** as a
+cross-validation backend. Until it exists, the §9 "grid ↔ closed form" check is pending; the
+gridded backend is validated by the moment-accounting and supportability checks instead.
 
 ---
 
@@ -473,7 +485,7 @@ later as the cross-validation backend.
 | Test | Expected result |
 |------|-----------------|
 | **Moment accounting** | Exact: $\int_{\text{domain}} F_{\text{final}}\, dA = \int F_0(x,y)\, dA + T \int \dot{M}_{\text{load}}(x,y)\, dA - \sum_i M_0(M_i)$, up to disk area clipped at domain edges (trackable) |
-| **Grid ↔ closed form** | Gridded $F$ matches the superposition formula of §1.4 at any $(x,y,t)$ to quadrature accuracy |
+| **Grid ↔ closed form** *(pending AnalyticField, §8)* | Gridded $F$ matches the superposition formula of §1.4 at any $(x,y,t)$ to quadrature accuracy |
 | **GR recovery** | With large $\dot{M}_{\text{load}}$ (near-static field), pooled magnitude histogram recovers input $b$ |
 | **Field sawtooth** | Plot $F$ at a fixed point over time: linear ramp with fixed drops $M_0(M_i)/A(M_i)$ from covering events; may dip below zero after large events |
 | **Size suppression** | In a depleted region the local $M_{\max}$ (and the largest observed magnitude) drops; the local branching ratio $n_{\text{local}}$ falls and cascades die out faster — while small events persist |
@@ -526,8 +538,10 @@ serve as the area an event draws from, is bounded by, and depletes. Key conseque
 
 - **Nucleation vs. centroid**: the disk is currently centered on the nucleation point and
   isotropic; real ruptures propagate asymmetrically toward charged ground (see §10).
-- **Root-find cost**: $M_{\max}$ is a 1-D bisection per accepted candidate; a summed-area table of
-  $F$ makes each enclosed-moment query $O(1)$ (§6 Notes).
+- **Scan cost**: $M_{\max}$ is a finite walk up the discrete magnitude bins per popped candidate
+  (§1.5 — no bisection). The implementation makes it incremental over precomputed per-bin annuli,
+  so the whole scan costs about one pass over the largest reached disk; a summed-area table of $F$
+  is a further optimization if profiling justifies it (not currently used).
 - **Disk approximation**: a square (integral-image) approximation of the disk is fast; a true
   circular mask is more accurate at the cost of a few more lookups.
 - **Edge bookkeeping**: disks clipped at the domain boundary lose their outside share of removed
