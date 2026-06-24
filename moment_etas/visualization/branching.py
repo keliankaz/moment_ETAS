@@ -14,6 +14,13 @@ from .plots import marker_size
 YEAR = 365.25
 
 
+def _clean(ax):
+    """Strip the axis apparatus (frame, ticks, tick labels, grid) for a clean
+    network-diagram look (à la complexity-explorables). Title and colorbar,
+    which carry meaning, are kept."""
+    ax.axis("off")
+
+
 def _tree(cat, members):
     """Return (root, children dict, generation dict) for the cluster."""
     mset = set(int(i) for i in members)
@@ -80,10 +87,8 @@ def cluster_tree(cat, members, ax=None):
     ax.scatter([gen[root]], [y[root]], s=marker_size(cat.m[root], cat.params.m_min),
                c="red", edgecolor="k", zorder=3, label=f"root M{cat.m[root]:.1f}")
     plt.colorbar(sc, ax=ax, label="time since root (yr)")
-    ax.set(xlabel="generation", ylabel="genealogy", yticks=[],
-           title=f"cluster genealogy — {len(members)} events, "
-                 f"{max(gen.values())} generations")
-    ax.legend(loc="upper right", fontsize=8)
+    ax.set_title(f"cluster genealogy — {len(members)} events, {max(gen.values())} generations")
+    _clean(ax)
     return ax
 
 
@@ -118,9 +123,8 @@ def cluster_tree_radial(cat, members, ax=None):
     ax.scatter([theta[root]], [0.0], s=marker_size(cat.m[root], cat.params.m_min),
                c="red", edgecolor="k", zorder=3, label=f"root M{cat.m[root]:.1f}")
     plt.colorbar(sc, ax=ax, label="generation", shrink=0.7, pad=0.1)
-    ax.set_rlabel_position(90)
     ax.set_title(f"radial genealogy — {len(members)} events\n(radius = time since root, yr)")
-    ax.legend(loc="upper right", bbox_to_anchor=(1.18, 1.12), fontsize=8)
+    _clean(ax)
     return ax
 
 
@@ -155,9 +159,9 @@ def cluster_map(cat, members, ax=None, color_by="generation"):
     ax.scatter([cat.x[root]], [cat.y[root]], s=marker_size(cat.m[root], cat.params.m_min),
                c="red", edgecolor="k", zorder=3, label=f"root M{cat.m[root]:.1f}")
     plt.colorbar(sc, ax=ax, label=color_by)
-    ax.set(xlabel="x (km)", ylabel="y (km)", aspect="equal",
-           title=f"cluster in space — {len(members)} events")
-    ax.legend(loc="upper right", fontsize=8)
+    ax.set_aspect("equal")
+    ax.set_title(f"cluster in space — {len(members)} events")
+    _clean(ax)
     return ax
 
 
