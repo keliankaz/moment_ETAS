@@ -38,6 +38,44 @@ class Catalog:
     def __len__(self) -> int:
         return len(self.t)
 
+    # --- branching structure -------------------------------------------------
+    # parent[i] is the triggering event's index (-1 for background). A parent is
+    # always recorded before its child (children pop later in time), so
+    # parent[i] < i, and roots/generations follow from one forward pass.
+
+    def cluster_roots(self) -> np.ndarray:
+        """Root (background-ancestor) index for every event.
+
+        Events sharing a root form one cluster: a background immigrant plus all
+        its triggered descendants.
+        """
+        roots = np.empty(len(self), dtype=int)
+        for i, par in enumerate(self.parent):
+            roots[i] = i if par < 0 else roots[par]
+        return roots
+
+    def generation(self) -> np.ndarray:
+        """Generation depth per event: 0 for background, parent's depth + 1 else."""
+        gen = np.zeros(len(self), dtype=int)
+        for i, par in enumerate(self.parent):
+            if par >= 0:
+                gen[i] = gen[par] + 1
+        return gen
+
+    def clusters(self, min_size: int = 1) -> list[np.ndarray]:
+        """Event-index arrays grouped by cluster, largest first.
+
+        Each array holds the (chronologically ordered) member indices of one
+        cluster; its first element is the background root. Within a cluster,
+        edges are ``(parent[i], i)`` for every non-root member i.
+        """
+        groups: dict[int, list[int]] = {}
+        for i, r in enumerate(self.cluster_roots()):
+            groups.setdefault(int(r), []).append(i)
+        out = [np.array(v) for v in groups.values()]
+        out.sort(key=len, reverse=True)
+        return [c for c in out if len(c) >= min_size]
+
     def field_at(self, t: float) -> GriddedField:
         """Reconstruct the moment field at time t by replaying depletions.
 
