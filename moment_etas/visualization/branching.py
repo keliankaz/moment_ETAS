@@ -87,6 +87,43 @@ def cluster_tree(cat, members, ax=None):
     return ax
 
 
+def cluster_tree_radial(cat, members, ax=None):
+    """Radial genealogy tree: angle = tidy-tree layout (spread over ±180°),
+    radius = time since the root (years). Root at the center; nodes sized by
+    magnitude, colored by generation.
+
+    Complements ``cluster_tree`` (generation on a linear x-axis): here time is
+    the radial axis, so the Omori cascade radiates outward while branches fan
+    around the circle. Pass a polar ``ax`` (``subplot_kw={"projection": "polar"}``)
+    or let one be created.
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(6.5, 6.5), subplot_kw={"projection": "polar"})
+    root, children, gen = _tree(cat, members)
+    y = _tidy_y(root, children)
+    ys = np.array(list(y.values()))
+    span = float(ys.max() - ys.min()) or 1.0
+    # spread the layout across (just inside) ±180° so the ends don't wrap onto each other
+    theta = {n: 0.98 * np.pi * (2 * (v - ys.min()) / span - 1) for n, v in y.items()}
+    radius = {n: (cat.t[n] - cat.t[root]) / YEAR for n in y}
+
+    segs = [[(theta[int(cat.parent[i])], radius[int(cat.parent[i])]), (theta[i], radius[i])]
+            for i in members if int(cat.parent[i]) in y]
+    ax.add_collection(LineCollection(segs, colors="0.8", linewidths=0.6, zorder=1))
+
+    mi = np.array(list(y))
+    sc = ax.scatter([theta[i] for i in mi], [radius[i] for i in mi],
+                    s=marker_size(cat.m[mi], cat.params.m_min),
+                    c=[gen[i] for i in mi], cmap="viridis", zorder=2)
+    ax.scatter([theta[root]], [0.0], s=marker_size(cat.m[root], cat.params.m_min),
+               c="red", edgecolor="k", zorder=3, label=f"root M{cat.m[root]:.1f}")
+    plt.colorbar(sc, ax=ax, label="generation", shrink=0.7, pad=0.1)
+    ax.set_rlabel_position(90)
+    ax.set_title(f"radial genealogy — {len(members)} events\n(radius = time since root, yr)")
+    ax.legend(loc="upper right", bbox_to_anchor=(1.18, 1.12), fontsize=8)
+    return ax
+
+
 def cluster_map(cat, members, ax=None, color_by="generation"):
     """Map of the cluster with parent→child links; the branching in space.
 
