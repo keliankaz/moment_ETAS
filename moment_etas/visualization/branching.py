@@ -77,8 +77,8 @@ def cluster_tree(cat, members, ax=None):
     sc = ax.scatter([gen[i] for i in mi], [y[i] for i in mi],
                     s=marker_size(cat.m[mi], cat.params.m_min),
                     c=dt, cmap="plasma", zorder=2)
-    ax.scatter([gen[root]], [y[root]], marker="*", s=300, c="red",
-               edgecolor="k", zorder=3, label=f"root M{cat.m[root]:.1f}")
+    ax.scatter([gen[root]], [y[root]], s=marker_size(cat.m[root], cat.params.m_min),
+               c="red", edgecolor="k", zorder=3, label=f"root M{cat.m[root]:.1f}")
     plt.colorbar(sc, ax=ax, label="time since root (yr)")
     ax.set(xlabel="generation", ylabel="genealogy", yticks=[],
            title=f"cluster genealogy — {len(members)} events, "
@@ -115,8 +115,8 @@ def cluster_map(cat, members, ax=None, color_by="generation"):
                     s=marker_size(cat.m[members], cat.params.m_min),
                     c=val, cmap="viridis", vmin=vmin, vmax=vmax,
                     edgecolor="k", linewidth=0.2, zorder=2)
-    ax.scatter([cat.x[root]], [cat.y[root]], marker="*", s=300, c="red",
-               edgecolor="k", zorder=3, label=f"root M{cat.m[root]:.1f}")
+    ax.scatter([cat.x[root]], [cat.y[root]], s=marker_size(cat.m[root], cat.params.m_min),
+               c="red", edgecolor="k", zorder=3, label=f"root M{cat.m[root]:.1f}")
     plt.colorbar(sc, ax=ax, label=color_by)
     ax.set(xlabel="x (km)", ylabel="y (km)", aspect="equal",
            title=f"cluster in space — {len(members)} events")
