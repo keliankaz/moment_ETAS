@@ -221,18 +221,17 @@ def _subtree_median_dist(root, children, dist):
 
 
 def cluster_git(cat, members, ax=None):
-    """Crossing-free curved tree view of the cluster.
+    """Curved tree view of the cluster on a time axis.
 
-    x = generation depth, y = tidy-tree layout with each node on its own row;
-    siblings are ordered by median epicentral distance from the root (nearer
-    lower). Parent→child edges are bezier curves and span exactly one
-    generation, so they live in the empty gap between generation columns and
-    **never cross**. Nodes uniform (no color), sized by magnitude.
+    x = log10(time since root, days), y = tidy-tree layout (each node its own
+    row) with siblings ordered by median epicentral distance from the root.
+    Parent→child edges are bezier curves; nodes uniform, sized by magnitude.
 
-    Note: this is *not* lane-collapsed like a literal git graph — multi-
-    generation lanes are unavoidably crossed by peel-offs for a bushy tree
-    (which is why real git graphs have crossings). Strict planarity requires
-    one-generation edges, i.e. one row per node.
+    A literal time axis cannot be strictly crossing-free for a bushy tree (an
+    edge to a far branch crosses whatever sits between it and its parent at
+    intermediate times — there is no per-generation gap to route through). The
+    tidy distance-sorted y-order is the crossing-*minimizing* arrangement; use
+    cluster_tree (generation axis) if you need exactly zero crossings.
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(11, 5))
@@ -244,10 +243,16 @@ def cluster_git(cat, members, ax=None):
         children[n].sort(key=lambda c: med[c])
     y = _tidy_y(root, children)
 
-    for n in members:                               # bezier edges, one generation each
+    # x = log10 days since root; root sits just left of the earliest event
+    dt = cat.t[members] - cat.t[root]
+    pos = dt[dt > 0]
+    x_root = (np.log10(pos.min()) - 0.5) if len(pos) else 0.0
+    x = {int(i): (np.log10(d) if d > 0 else x_root) for i, d in zip(members, dt)}
+
+    for n in members:                               # bezier edges parent→child
         p = int(cat.parent[n])
         if p in y:
-            x0, y0, x1, y1 = gen[p], y[p], gen[int(n)], y[int(n)]
+            x0, y0, x1, y1 = x[p], y[p], x[int(n)], y[int(n)]
             xm = 0.5 * (x0 + x1)
             ax.add_patch(PathPatch(
                 Path([(x0, y0), (xm, y0), (xm, y1), (x1, y1)],
@@ -255,13 +260,21 @@ def cluster_git(cat, members, ax=None):
                 fill=False, edgecolor="0.6", lw=0.8, zorder=1))
 
     nodes = np.array([int(i) for i in members])
-    ax.scatter([gen[n] for n in nodes], [y[n] for n in nodes],
+    ax.scatter([x[n] for n in nodes], [y[n] for n in nodes],
                s=np.clip(marker_size(cat.m[nodes], cat.params.m_min), 8, 250),
                **_marker_style, zorder=2)
 
+    tick_days = [1 / 24, 1, 30, YEAR, 10 * YEAR, 100 * YEAR]
+    tick_lab = ["1 hr", "1 d", "1 mo", "1 yr", "10 yr", "100 yr"]
+    xmax = max(x.values())
+    keep = [(np.log10(d), lab) for d, lab in zip(tick_days, tick_lab)
+            if x_root <= np.log10(d) <= xmax]
+    if keep:
+        ax.set_xticks([t for t, _ in keep])
+        ax.set_xticklabels([lab for _, lab in keep])
     ax.set_yticks([])
     for sp in ("top", "left", "right"):
         ax.spines[sp].set_visible(False)
-    ax.set_xlabel("generation")
-    ax.set_title(f"cluster tree — {len(members)} events (crossing-free, distance-sorted)")
+    ax.set_xlabel("time since root")
+    ax.set_title(f"cluster tree — {len(members)} events (time axis, distance-sorted)")
     return ax
