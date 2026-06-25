@@ -8,8 +8,6 @@ non-root member. All views take the catalog and one such member array.
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
-from matplotlib.path import Path
-from matplotlib.patches import PathPatch
 
 from .plots import marker_size
 
@@ -221,17 +219,14 @@ def _subtree_median_dist(root, children, dist):
 
 
 def cluster_git(cat, members, ax=None):
-    """Curved tree view of the cluster on a time axis.
+    """Git-graph view of the cluster on a time axis — crossing-free.
 
     x = log10(time since root, days), y = tidy-tree layout (each node its own
     row) with siblings ordered by median epicentral distance from the root.
-    Parent→child edges are bezier curves; nodes uniform, sized by magnitude.
-
-    A literal time axis cannot be strictly crossing-free for a bushy tree (an
-    edge to a far branch crosses whatever sits between it and its parent at
-    intermediate times — there is no per-generation gap to route through). The
-    tidy distance-sorted y-order is the crossing-*minimizing* arrangement; use
-    cluster_tree (generation axis) if you need exactly zero crossings.
+    Edges are orthogonal: vertical at the parent's time (the fork), then
+    horizontal along the child's lane. Because the vertical fan-out happens at
+    the fork time, inside the parent's reserved band, edges never cross — even
+    on a time axis (verified). Nodes uniform, sized by magnitude.
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(11, 5))
@@ -249,15 +244,12 @@ def cluster_git(cat, members, ax=None):
     x_root = (np.log10(pos.min()) - 0.5) if len(pos) else 0.0
     x = {int(i): (np.log10(d) if d > 0 else x_root) for i, d in zip(members, dt)}
 
-    for n in members:                               # bezier edges parent→child
-        p = int(cat.parent[n])
+    for n in members:                               # orthogonal connectors (vertical
+        p = int(cat.parent[n])                      # at the fork time, then horizontal)
         if p in y:
             x0, y0, x1, y1 = x[p], y[p], x[int(n)], y[int(n)]
-            xm = 0.5 * (x0 + x1)
-            ax.add_patch(PathPatch(
-                Path([(x0, y0), (xm, y0), (xm, y1), (x1, y1)],
-                     [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4]),
-                fill=False, edgecolor="0.6", lw=0.8, zorder=1))
+            ax.plot([x0, x0, x1], [y0, y1, y1], color="0.6", lw=0.8, zorder=1,
+                    solid_capstyle="round", solid_joinstyle="round")
 
     nodes = np.array([int(i) for i in members])
     ax.scatter([x[n] for n in nodes], [y[n] for n in nodes],
