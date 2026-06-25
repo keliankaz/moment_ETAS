@@ -66,6 +66,31 @@ def _tidy_y(root, children):
     return y
 
 
+def _up_layout(root, children):
+    """Up-only lane layout (git style): each node sits at the bottom of its
+    subtree. The first child continues on the parent's lane; every additional
+    child takes a new lane above, so y(child) >= y(parent) and forks only step
+    up. Children are taken in the order given (sort beforehand for distance)."""
+    y = {root: 0}
+    top = [0]                                       # highest lane allocated so far
+    frames = [[root, 0]]                            # node, next child index
+    while frames:
+        node, ci = frames[-1]
+        kids = children[node]
+        if ci < len(kids):
+            frames[-1][1] += 1
+            c = kids[ci]
+            if ci == 0:
+                y[c] = y[node]                      # first child stays on the lane
+            else:
+                top[0] += 1
+                y[c] = top[0]                       # extra children branch upward
+            frames.append([c, 0])
+        else:
+            frames.pop()
+    return y
+
+
 def cluster_tree(cat, members, ax=None):
     """Genealogy tree of the cluster (the family tree).
 
@@ -221,12 +246,13 @@ def _subtree_median_dist(root, children, dist):
 def cluster_git(cat, members, ax=None):
     """Git-graph view of the cluster on a time axis — crossing-free.
 
-    x = log10(time since root, days), y = tidy-tree layout (each node its own
-    row) with siblings ordered by median epicentral distance from the root.
-    Edges are orthogonal: vertical at the parent's time (the fork), then
-    horizontal along the child's lane. Because the vertical fan-out happens at
-    the fork time, inside the parent's reserved band, edges never cross — even
-    on a time axis (verified). Nodes uniform, sized by magnitude.
+    x = log10(time since root, days), y = up-only lane layout: the nearest child
+    continues the parent's lane and every extra child branches to a new lane
+    above, so forks only ever step up (siblings ordered by median epicentral
+    distance). Edges are orthogonal: vertical at the parent's time (the fork),
+    then horizontal along the child's lane. Because the vertical fan-out happens
+    at the fork time, inside the parent's reserved band, edges never cross —
+    even on a time axis (verified). Nodes uniform, sized by magnitude.
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(11, 5))
@@ -236,7 +262,7 @@ def cluster_git(cat, members, ax=None):
     med = _subtree_median_dist(root, children, dist)
     for n in children:                              # sibling sort by median distance
         children[n].sort(key=lambda c: med[c])
-    y = _tidy_y(root, children)
+    y = _up_layout(root, children)                  # up-only lanes (forks step up)
 
     # x = log10 days since root; root sits just left of the earliest event
     dt = cat.t[members] - cat.t[root]
@@ -268,5 +294,5 @@ def cluster_git(cat, members, ax=None):
     for sp in ("top", "left", "right"):
         ax.spines[sp].set_visible(False)
     ax.set_xlabel("time since root")
-    ax.set_title(f"cluster tree — {len(members)} events (time axis, distance-sorted)")
+    ax.set_title(f"cluster git-graph — {len(members)} events")
     return ax
