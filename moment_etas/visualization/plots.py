@@ -10,7 +10,7 @@ from ..model.rupture import rupture_radius
 
 def marker_size(m, m_min):
     """Shared marker-area scaling for magnitude, so scatter plots compare."""
-    return 2.0 * 10 ** (np.asarray(m) - m_min - 1)
+    return 10 ** (0.5*(np.asarray(m) - m_min))
 
 
 def magnitude_time(cat, ax=None):
