@@ -10,7 +10,7 @@ from ..model.rupture import rupture_radius
 
 def marker_size(m, m_min):
     """Shared marker-area scaling for magnitude, so scatter plots compare."""
-    return 2.0 * 2.0 ** (np.asarray(m) - m_min)
+    return 2.0 * 10 ** (np.asarray(m) - m_min - 1)
 
 
 def magnitude_time(cat, ax=None):
@@ -208,7 +208,7 @@ def field_animation(cat, path="field_evolution.gif", t_start=None, t_end=None,
         frames[f] = fld.field(tf)
 
     # events flash for flash_sec of GIF time => this much model time:
-    frame_dt = (t_end - t_start) / max(n_frames - 1, 1)
+    frame_dt = (t_end - t_start) / max(n_frames - 1, 1) 
     flash_dt = max(1, round(flash_sec * fps)) * frame_dt
     sel = (cat.t > t_start - flash_dt) & (cat.t <= t_end)
     if flash_m_min is not None:
