@@ -14,10 +14,11 @@ from matplotlib.patches import PathPatch
 from .plots import marker_size
 
 YEAR = 365.25
+
 # Uniform node style (no color coding); the root gets a single red accent so it
 # stays identifiable — it is not reliably the largest event in the cluster.
-_marker_style = {"edgecolor": "k", "linewidth": 0.2, "color": "slategray"}
-_root_style = {**_marker_style, "color": "red"}
+
+_marker_style = {"edgecolor": "k", "linewidth": 0.2}
 
 
 def _clean(ax):
@@ -94,13 +95,7 @@ def cluster_tree(cat, members, ax=None):
         **_marker_style,
         zorder=2,
     )
-    ax.scatter(
-        [gen[root]],
-        [y[root]],
-        s=marker_size(cat.m[root], cat.params.m_min),
-        **_root_style,
-        zorder=3,
-    )
+
     ax.set_title(
         f"cluster genealogy — {len(members)} events, {max(gen.values())} generations"
     )
@@ -143,13 +138,6 @@ def cluster_tree_radial(cat, members, ax=None):
         **_marker_style,
         zorder=2,
     )
-    ax.scatter(
-        [theta[root]],
-        [0.0],
-        s=marker_size(cat.m[root], cat.params.m_min),
-        **_root_style,
-        zorder=3,
-    )
     ax.set_title(
         f"radial genealogy — {len(members)} events\n(radius = time since root, yr)"
     )
@@ -165,7 +153,7 @@ def cluster_map(cat, members, ax=None):
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(6.5, 6))
-    root, _, _ = _tree(cat, members)
+    root, _, gen = _tree(cat, members)
 
     segs = []
 
@@ -179,18 +167,12 @@ def cluster_map(cat, members, ax=None):
         cat.x[members],
         cat.y[members],
         s=marker_size(cat.m[members], cat.params.m_min),
+        c=np.array([gen[int(i)] for i in members]),
+        cmap="YlGnBu_r",
         **_marker_style,
         zorder=2,
     )
-    ax.scatter(
-        [cat.x[root]],
-        [cat.y[root]],
-        s=marker_size(cat.m[root], cat.params.m_min),
-        **_root_style,
-        zorder=3,
-    )
     ax.set_aspect("equal")
-    ax.set_title(f"cluster in space — {len(members)} events")
     _clean(ax)
     return ax
 
@@ -218,125 +200,68 @@ def cluster_diagnostics(cat, members, axes=None):
     return axes
 
 
-# --- git-graph view ---------------------------------------------------------
+# --- crossing-free curved tree view -----------------------------------------
 
-def _heavy_branches(cat, members):
-    """Heavy-path decomposition of the cluster tree.
-
-    Returns (root, branches, node_branch) where each branch is a list of node
-    indices forming a heavy path (each node continues into its largest-subtree
-    child); lighter children start new branches. node_branch maps node → branch
-    index. This collapses linear runs into single lanes, the git way.
-    """
-    root, children, _ = _tree(cat, members)
-    nodes = [int(i) for i in members]
-    # subtree sizes (iterative post-order)
-    size = {}
+def _subtree_median_dist(root, children, dist):
+    """Median epicentral distance over each node's subtree (post-order)."""
+    sub = {}
     stack = [(root, False)]
     while stack:
         n, done = stack.pop()
         if done:
-            size[n] = 1 + sum(size[c] for c in children[n])
+            vals = [dist[n]]
+            for c in children[n]:
+                vals.extend(sub[c])
+            sub[n] = vals
         else:
             stack.append((n, True))
             for c in children[n]:
                 stack.append((c, False))
-    heavy = {n: (max(children[n], key=lambda c: size[c]) if children[n] else None)
-             for n in nodes}
-    branches, node_branch = [], {}
-    for n in nodes:
-        par = int(cat.parent[n])
-        if par < 0 or heavy.get(par) != n:          # a head: root or a light child
-            path, cur = [], n
-            while cur is not None:
-                path.append(cur)
-                node_branch[cur] = len(branches)
-                cur = heavy[cur]
-            branches.append(path)
-    return root, branches, node_branch
+    return {n: float(np.median(v)) for n, v in sub.items()}
 
 
-def cluster_git(cat, members, ax=None, pad=0.12):
-    """Git-graph view of the cluster.
+def cluster_git(cat, members, ax=None):
+    """Crossing-free curved tree view of the cluster.
 
-    x = log10(time since root, days); each branch (heavy path) is a horizontal
-    lane. Lanes are packed greedily (a freed lane is reused by a later,
-    non-overlapping branch — height = max concurrent branches, not total), with
-    the lane nearest the parent's preferred to keep edges short, and median
-    epicentral distance from the root as the tiebreak. Children peel off their
-    parent with a bezier curve. Nodes sized by magnitude; root in red.
+    x = generation depth, y = tidy-tree layout with each node on its own row;
+    siblings are ordered by median epicentral distance from the root (nearer
+    lower). Parent→child edges are bezier curves and span exactly one
+    generation, so they live in the empty gap between generation columns and
+    **never cross**. Nodes uniform (no color), sized by magnitude.
 
-    Trade-off (by design): lane reuse gives up strict planarity, so a few edges
-    may cross — exactly the git aesthetic.
+    Note: this is *not* lane-collapsed like a literal git graph — multi-
+    generation lanes are unavoidably crossed by peel-offs for a bushy tree
+    (which is why real git graphs have crossings). Strict planarity requires
+    one-generation edges, i.e. one row per node.
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(11, 5))
-    root, branches, node_branch = _heavy_branches(cat, members)
-
-    # x = log10 days since root; root sits just left of the earliest event
-    dt = (cat.t[members] - cat.t[root])
-    pos = dt[dt > 0]
-    x_root = np.log10(pos.min()) - 0.5 if len(pos) else 0.0
-    x = {int(i): (np.log10(d) if d > 0 else x_root) for i, d in zip(members, dt)}
+    root, children, gen = _tree(cat, members)
     dist = {int(i): float(np.hypot(cat.x[i] - cat.x[root], cat.y[i] - cat.y[root]))
             for i in members}
+    med = _subtree_median_dist(root, children, dist)
+    for n in children:                              # sibling sort by median distance
+        children[n].sort(key=lambda c: med[c])
+    y = _tidy_y(root, children)
 
-    nb = len(branches)
-    x_head = np.array([x[b[0]] for b in branches])
-    x_tail = np.array([x[b[-1]] for b in branches])
-    med_dist = np.array([np.median([dist[n] for n in b]) for b in branches])
-    parent_of_head = [int(cat.parent[b[0]]) for b in branches]   # -1 for root branch
-
-    # greedy nearest-free-lane packing, processed by head time then distance
-    order = sorted(range(nb), key=lambda b: (x_head[b], med_dist[b]))
-    free_after = []                  # x beyond which each lane is free
-    branch_lane = {}
-    for b in order:
-        pn = parent_of_head[b]
-        target = 0 if pn < 0 else branch_lane[node_branch[pn]]
-        cands = [ln for ln, fa in enumerate(free_after) if fa <= x_head[b] - pad]
-        lane = (min(cands, key=lambda ln: (abs(ln - target), ln)) if cands
-                else len(free_after))
-        if lane == len(free_after):
-            free_after.append(0.0)
-        free_after[lane] = x_tail[b] + pad
-        branch_lane[b] = lane
-    node_lane = {n: branch_lane[bi] for n, bi in node_branch.items()}
-
-    # within-branch lanes (horizontal) + bezier peel-offs from parent to head
-    for b, path in enumerate(branches):
-        ln = branch_lane[b]
-        ax.plot([x[n] for n in path], [ln] * len(path), color="0.6", lw=0.9, zorder=1)
-        pn = parent_of_head[b]
-        if pn >= 0:
-            x0, y0, x1, y1 = x[pn], node_lane[pn], x[path[0]], ln
+    for n in members:                               # bezier edges, one generation each
+        p = int(cat.parent[n])
+        if p in y:
+            x0, y0, x1, y1 = gen[p], y[p], gen[int(n)], y[int(n)]
             xm = 0.5 * (x0 + x1)
             ax.add_patch(PathPatch(
                 Path([(x0, y0), (xm, y0), (xm, y1), (x1, y1)],
                      [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4]),
-                fill=False, edgecolor="0.6", lw=0.9, zorder=1))
+                fill=False, edgecolor="0.6", lw=0.8, zorder=1))
 
     nodes = np.array([int(i) for i in members])
-    s = np.clip(marker_size(cat.m[nodes], cat.params.m_min), 8, 250)
-    ax.scatter([x[n] for n in nodes], [node_lane[n] for n in nodes], s=s,
+    ax.scatter([gen[n] for n in nodes], [y[n] for n in nodes],
+               s=np.clip(marker_size(cat.m[nodes], cat.params.m_min), 8, 250),
                **_marker_style, zorder=2)
-    ax.scatter([x[root]], [0], s=np.clip(marker_size(cat.m[root], cat.params.m_min), 8, 250),
-               **_root_style, zorder=3)
 
-    # readable time x-axis; lanes have no quantitative meaning so hide y
-    tick_days = [1 / 24, 1, 30, YEAR, 10 * YEAR, 100 * YEAR]
-    tick_lab = ["1 hr", "1 d", "1 mo", "1 yr", "10 yr", "100 yr"]
-    xmin = x_root
-    xmax = max(x_tail) if nb else 1.0
-    keep = [(np.log10(d), lab) for d, lab in zip(tick_days, tick_lab)
-            if xmin <= np.log10(d) <= xmax]
-    if keep:
-        ax.set_xticks([t for t, _ in keep])
-        ax.set_xticklabels([lab for _, lab in keep])
     ax.set_yticks([])
     for sp in ("top", "left", "right"):
         ax.spines[sp].set_visible(False)
-    ax.set_ylim(-1, len(free_after))
-    ax.set_xlabel("time since root")
-    ax.set_title(f"cluster git-graph — {len(members)} events, {len(free_after)} lanes")
+    ax.set_xlabel("generation")
+    ax.set_title(f"cluster tree — {len(members)} events (crossing-free, distance-sorted)")
     return ax
