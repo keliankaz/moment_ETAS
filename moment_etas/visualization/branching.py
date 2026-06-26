@@ -8,6 +8,8 @@ non-root member. All views take the catalog and one such member array.
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
 
 from .plots import marker_size
 
@@ -270,16 +272,23 @@ def cluster_git(cat, members, ax=None):
     x_root = (np.log10(pos.min()) - 0.5) if len(pos) else 0.0
     x = {int(i): (np.log10(d) if d > 0 else x_root) for i, d in zip(members, dt)}
 
-    for n in members:                               # orthogonal connectors (vertical
-        p = int(cat.parent[n])                      # at the fork time, then horizontal)
-        if p in y:
+    for n in members:                               # peel-off connectors: rise vertically
+        p = int(cat.parent[n])                      # at the fork time, round the corner,
+        if p in y:                                  # then run horizontal along the lane
             x0, y0, x1, y1 = x[p], y[p], x[int(n)], y[int(n)]
-            ax.plot([x0, x0, x1], [y0, y1, y1], color="0.6", lw=0.8, zorder=1,
-                    solid_capstyle="round", solid_joinstyle="round")
+            if y1 == y0:                            # same lane: straight horizontal
+                ax.plot([x0, x1], [y0, y0], color="0.6", lw=0.8, zorder=1)
+            else:
+                ry = min(0.4, 0.5 * (y1 - y0))      # small rounded corner (stays near x0,
+                rx = min(0.3, 0.5 * (x1 - x0))       # so the peel doesn't cross neighbours)
+                ax.add_patch(PathPatch(
+                    Path([(x0, y0), (x0, y1 - ry), (x0, y1), (x0 + rx, y1), (x1, y1)],
+                         [Path.MOVETO, Path.LINETO, Path.CURVE3, Path.CURVE3, Path.LINETO]),
+                    fill=False, edgecolor="0.6", lw=0.8, zorder=1))
 
     nodes = np.array([int(i) for i in members])
     ax.scatter([x[n] for n in nodes], [y[n] for n in nodes],
-               s=np.clip(marker_size(cat.m[nodes], cat.params.m_min), 8, 250),
+               s=np.clip(marker_size(cat.m[nodes], cat.params.m_min), 3, None),
                **_marker_style, zorder=2)
 
     tick_days = [1 / 24, 1, 30, YEAR, 10 * YEAR, 100 * YEAR]
